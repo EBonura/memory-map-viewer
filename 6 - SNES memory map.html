@@ -1,0 +1,2188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NES/SNES Memory Map Visualization</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        h1, h2, h3 {
+            color: #333;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .controls {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .filter-group {
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .filter-group h3 {
+            margin-top: 0;
+            margin-bottom: 10px;
+        }
+        .map-container {
+            position: relative;
+            background-color: white;
+            border-radius: 5px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 20px;
+            margin-bottom: 30px;
+            overflow: visible; /* Allow elements to be visible outside the container */
+        }
+        .memory-map {
+            width: 100%;
+            height: 700px;
+            position: relative;
+            border: 2px solid #000;
+            background-color: #f0f0f0;
+            overflow: visible; /* Allow axis markers to be visible */
+            margin-bottom: 30px; /* Space for x-axis */
+            margin-right: 50px;  /* Space for y-axis */
+        }
+        .memory-region {
+            position: absolute;
+            cursor: pointer;
+            transition: transform 0.1s;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-sizing: border-box;
+            border: 1px solid rgba(0,0,0,0.2);
+            color: white;
+            font-weight: bold;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+            font-size: 12px;
+        }
+        .memory-region:hover {
+            transform: scale(1.01);
+            z-index: 100;
+            box-shadow: 0 0 10px rgba(0,0,0,0.3);
+        }
+        .region-label {
+            margin: 4px;
+            font-size: 10px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .address-label {
+            position: absolute;
+            top: 2px;
+            left: 3px;
+            font-size: 9px;
+            color: rgba(255,255,255,0.9);
+        }
+        .axis-marker {
+            position: absolute;
+            font-size: 9px;
+            color: #666;
+            font-family: monospace;
+            pointer-events: none;
+        }
+        
+        .x-marker {
+            bottom: -25px; /* Position below the map */
+            transform: translateX(-50%);
+        }
+
+        .y-marker {
+            right: -45px; /* Position to the right of the map */
+            transform: translateY(-50%);
+        }
+        
+        .x-axis, .y-axis {
+            position: absolute;
+            display: flex;
+            justify-content: space-between;
+            color: #666;
+            font-size: 12px;
+            font-family: monospace;
+            z-index: 10;
+        }
+
+        .x-axis {
+            bottom: -25px; /* Position below the map */
+            left: 0;
+            width: 100%;
+        }
+
+        .y-axis {
+            top: 0;
+            right: -45px; /* Position to the right of the map */
+            height: 100%;
+            flex-direction: column;
+        }
+        
+        .axis-tick {
+            position: absolute;
+            background-color: rgba(0,0,0,0.2);
+        }
+        
+        .x-tick {
+            width: 1px;
+            height: 5px;
+            bottom: -5px;
+        }
+        
+        .y-tick {
+            height: 1px;
+            width: 5px;
+            right: -5px;
+        }
+        .grid-line {
+            position: absolute;
+            background-color: rgba(0,0,0,0.1);
+        }
+        .grid-line-x {
+            width: 1px;
+            height: 100%;
+            top: 0;
+        }
+        .grid-line-y {
+            height: 1px;
+            width: 100%;
+            left: 0;
+        }
+        .tooltip {
+            position: absolute;
+            background-color: #333;
+            color: white;
+            padding: 10px 15px;
+            border-radius: 5px;
+            z-index: 200;
+            max-width: 300px;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.2);
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        .tooltip h4 {
+            margin-top: 0;
+            margin-bottom: 5px;
+            border-bottom: 1px solid rgba(255,255,255,0.3);
+            padding-bottom: 3px;
+        }
+        .tooltip p {
+            margin: 5px 0;
+            font-size: 14px;
+        }
+        .tooltip .address-range {
+            font-family: monospace;
+            background-color: rgba(255,255,255,0.1);
+            padding: 3px 5px;
+            border-radius: 3px;
+            font-size: 12px;
+        }
+        .legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 20px;
+            padding: 15px;
+            background-color: white;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-right: 15px;
+        }
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            margin-right: 5px;
+            border-radius: 3px;
+        }
+        .info-panel {
+            background-color: white;
+            border-radius: 5px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 20px;
+            margin-top: 20px;
+        }
+        .info-panel h2 {
+            margin-top: 0;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
+        .info-section {
+            margin-top: 30px;
+        }
+        .info-section h3 {
+            color: #4285F4;
+        }
+        .code-block {
+            background-color: #f5f5f5;
+            border-left: 4px solid #4285F4;
+            padding: 10px 15px;
+            font-family: monospace;
+            overflow-x: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        table, th, td {
+            border: 1px solid #ddd;
+        }
+        th, td {
+            padding: 8px 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .tab-container {
+            margin-top: 20px;
+        }
+        .tab-buttons {
+            display: flex;
+            border-bottom: 1px solid #ddd;
+            flex-wrap: wrap;
+        }
+        .tab-button {
+            padding: 10px 20px;
+            cursor: pointer;
+            border: 1px solid transparent;
+            border-bottom: none;
+            background: #f5f5f5;
+            margin-right: 5px;
+            margin-bottom: 5px;
+        }
+        .tab-button.active {
+            background: white;
+            border-color: #ddd;
+            border-bottom-color: white;
+        }
+        .tab-content {
+            display: none;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-top: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .system-selector {
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .system-button {
+            padding: 10px 20px;
+            margin: 0 10px;
+            font-size: 16px;
+            background-color: #f5f5f5;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .system-button.active {
+            background-color: #4285F4;
+            color: white;
+            border-color: #2a75f3;
+        }
+        @media (max-width: 768px) {
+            .memory-map {
+                height: 500px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>NES/SNES Memory Map Visualization</h1>
+    
+    <div class="system-selector">
+        <button class="system-button" data-system="nes">NES</button>
+        <button class="system-button active" data-system="snes">SNES</button>
+    </div>
+    
+    <div class="controls">
+        <div class="filter-group">
+            <h3>Memory Map Type</h3>
+            <select id="map-type">
+                <!-- SNES Options -->
+                <option value="lorom" class="snes-option">LoROM</option>
+                <option value="hirom" class="snes-option">HiROM</option>
+                <option value="exlorom" class="snes-option">ExLoROM</option>
+                <option value="exhirom" class="snes-option">ExHiROM</option>
+                <!-- NES Options -->
+                <option value="nes_nrom" class="nes-option">NROM (No Mapper)</option>
+                <option value="nes_mmc1" class="nes-option">MMC1 (Mapper 1)</option>
+                <option value="nes_mmc3" class="nes-option">MMC3 (Mapper 4)</option>
+                <option value="nes_vrc6" class="nes-option">VRC6 (Mapper 24/26)</option>
+            </select>
+        </div>
+        
+        <div class="filter-group">
+            <h3>Filter by Function</h3>
+            <div>
+                <input type="checkbox" id="show-ram" checked>
+                <label for="show-ram">RAM</label>
+            </div>
+            <div>
+                <input type="checkbox" id="show-rom" checked>
+                <label for="show-rom">ROM</label>
+            </div>
+            <div>
+                <input type="checkbox" id="show-hardware" checked>
+                <label for="show-hardware">Hardware Registers</label>
+            </div>
+            <div>
+                <input type="checkbox" id="show-unused" checked>
+                <label for="show-unused">Unused</label>
+            </div>
+        </div>
+        
+        <div class="filter-group snes-controls">
+            <h3>Display Options</h3>
+            <div>
+                <input type="checkbox" id="show-shadows" checked>
+                <label for="show-shadows">Show Shadowed Memory</label>
+            </div>
+            <div>
+                <input type="checkbox" id="show-grid" checked>
+                <label for="show-grid">Show Grid</label>
+            </div>
+            <div>
+                <input type="checkbox" id="show-fastrom">
+                <label for="show-fastrom">FastROM Mode</label>
+            </div>
+        </div>
+        
+        <div class="filter-group nes-controls" style="display: none;">
+            <h3>NES Display Options</h3>
+            <div>
+                <input type="checkbox" id="show-mirrors" checked>
+                <label for="show-mirrors">Show Mirrored Memory</label>
+            </div>
+            <div>
+                <input type="checkbox" id="show-grid-nes" checked>
+                <label for="show-grid-nes">Show Grid</label>
+            </div>
+        </div>
+    </div>
+    
+    <div class="map-container">
+        <div id="memory-map" class="memory-map"></div>
+        <div id="tooltip" class="tooltip"></div>
+    </div>
+    
+    <div class="legend">
+        <div class="legend-item">
+            <div class="legend-color" style="background-color: #4285F4;"></div>
+            <span>RAM</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background-color: #34A853;"></div>
+            <span>ROM</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background-color: #FBBC05;"></div>
+            <span>Hardware Registers</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background-color: #EA4335;"></div>
+            <span>SRAM/PRG-RAM</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background-color: #9AA0A6;"></div>
+            <span>Unused/Reserved</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background-color: #673AB7;"></div>
+            <span>Shadowed/Mirrored</span>
+        </div>
+        <div class="legend-item nes-only" style="display: none;">
+            <div class="legend-color" style="background-color: #FF9800;"></div>
+            <span>CHR-ROM/VRAM</span>
+        </div>
+    </div>
+    
+    <!-- SNES Tabs -->
+    <div class="tab-container snes-tabs">
+        <div class="tab-buttons">
+            <div class="tab-button active" data-tab="overview">Overview</div>
+            <div class="tab-button" data-tab="header">SNES Header</div>
+            <div class="tab-button" data-tab="rom-types">ROM Types</div>
+            <div class="tab-button" data-tab="technical">Technical Details</div>
+        </div>
+        
+        <div class="tab-content active" id="tab-overview">
+            <h2>About SNES Memory Map</h2>
+            <p>The Super Nintendo Entertainment System (SNES) uses a 24-bit address space, capable of addressing up to 16MB of memory. 
+            The memory is organized in banks of 64KB each, with various regions mapped to RAM, ROM, hardware registers, and special function areas.</p>
+            
+            <p>The visualization above accurately represents the memory layout where:</p>
+            <ul>
+                <li>The X-axis shows the address offset within a bank ($0000-$FFFF)</li>
+                <li>The Y-axis shows the bank number ($00-$FF)</li>
+            </ul>
+            
+            <p>There are two main cartridge types, referred to as LoROM and HiROM, which use different memory mapping schemes:</p>
+            
+            <ul>
+                <li><strong>LoROM</strong>: Maps ROM in the upper half of each bank (32KB per bank), allowing up to 4MB of ROM.</li>
+                <li><strong>HiROM</strong>: Maps ROM across entire banks (64KB per bank), also allowing up to 4MB of ROM.</li>
+                <li><strong>ExLoROM/ExHiROM</strong>: Extended versions that can support up to 8MB of ROM.</li>
+            </ul>
+            
+            <p>Hover over memory regions in the visualization to see detailed information about each memory section.</p>
+        </div>
+        
+        <div class="tab-content" id="tab-header">
+            <h2>SNES ROM Header</h2>
+            <p>At the end of bank 0 (the very first bank of the cartridge), 64 ($40) bytes of cartridge information are stored. This information is crucial to the execution of the ROM saved on the cartridge, as it includes the internal name of the ROM, the interrupt vectors, version, etc.</p>
+            
+            <p>The end of the very first bank of the ROM depends on which memory map it uses:</p>
+            <ul>
+                <li>In LoROM, the header is located at offset $7FC0-$7FFF</li>
+                <li>In HiROM, the header is located at offset $FFC0-$FFFF</li>
+            </ul>
+            
+            <table>
+                <tr>
+                    <th>Offset</th>
+                    <th>Name</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td>$xFC0</td>
+                    <td>Game title</td>
+                    <td>21 bytes, usually uppercase ASCII</td>
+                </tr>
+                <tr>
+                    <td>$xFD5</td>
+                    <td>Mapping mode</td>
+                    <td>001ABBBB; A==1 means FastROM ($10). BBBB is the mapping mode</td>
+                </tr>
+                <tr>
+                    <td>$xFD6</td>
+                    <td>ROM type</td>
+                    <td>Denotes that the cartridge contains expansion chips, SRAM, batteries, etc.</td>
+                </tr>
+                <tr>
+                    <td>$xFD7</td>
+                    <td>ROM size</td>
+                    <td>The size of the ROM. Use $400<<(ROM size) to get the overall size in bytes</td>
+                </tr>
+                <tr>
+                    <td>$xFD8</td>
+                    <td>SRAM size</td>
+                    <td>The size of SRAM. Use $400<<(RAM size) to get the size in bytes</td>
+                </tr>
+                <tr>
+                    <td>$xFD9</td>
+                    <td>Developer ID</td>
+                    <td>$33 if using header revision 3</td>
+                </tr>
+                <tr>
+                    <td>$xFDC</td>
+                    <td>Checksum complement</td>
+                    <td></td>
+                </tr>
+                <tr>
+                    <td>$xFDE</td>
+                    <td>Checksum</td>
+                    <td></td>
+                </tr>
+            </table>
+            
+            <h3>Interrupt Vectors</h3>
+            <p>After the header information, the interrupt vector tables begin. These specify the addresses of code that handles various types of interrupts.</p>
+            
+            <table>
+                <tr>
+                    <th>Interrupt</th>
+                    <th>Offset</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td>COP</td>
+                    <td>$xFE4-5</td>
+                    <td>Software interrupt triggered by the COP instruction</td>
+                </tr>
+                <tr>
+                    <td>BRK</td>
+                    <td>$xFE6-7</td>
+                    <td>Software interrupt triggered by the BRK instruction</td>
+                </tr>
+                <tr>
+                    <td>ABORT</td>
+                    <td>$xFE8-9</td>
+                    <td>Not used in the SNES</td>
+                </tr>
+                <tr>
+                    <td>NMI</td>
+                    <td>$xFEA-B</td>
+                    <td>Non-maskable interrupt called during vertical refresh (vblank)</td>
+                </tr>
+                <tr>
+                    <td>IRQ</td>
+                    <td>$xFEE-F</td>
+                    <td>Interrupt request - can be set at a specific spot in the horizontal refresh cycle</td>
+                </tr>
+            </table>
+            
+            <p>Program execution begins in emulation mode at the reset vector ($xFFC-D).</p>
+        </div>
+        
+        <div class="tab-content" id="tab-rom-types">
+            <h2>ROM Types and Mapping Modes</h2>
+            
+            <p>The ROM makeup byte in the header (at offset $xFD5) indicates the type of ROM and mapping used:</p>
+            
+            <table>
+                <tr>
+                    <th>Value</th>
+                    <th>Bitmask</th>
+                    <th>Definition</th>
+                    <th>Example ROM</th>
+                    <th>Example Size</th>
+                </tr>
+                <tr>
+                    <td>$20</td>
+                    <td>%0010 0000</td>
+                    <td>LoROM</td>
+                    <td>Final Fantasy 4</td>
+                    <td>1048576 bytes / 1 MB</td>
+                </tr>
+                <tr>
+                    <td>$21</td>
+                    <td>%0010 0001</td>
+                    <td>HiROM</td>
+                    <td>Final Fantasy 5</td>
+                    <td>2097152 bytes / 2 MB</td>
+                </tr>
+                <tr>
+                    <td>$23</td>
+                    <td>%0010 0011</td>
+                    <td>SA-1 ROM</td>
+                    <td>Super Mario RPG</td>
+                    <td>4194304 bytes / 4 MB</td>
+                </tr>
+                <tr>
+                    <td>$30</td>
+                    <td>%0011 0000</td>
+                    <td>LoROM + FastROM</td>
+                    <td>Ultima VII</td>
+                    <td>1572864 bytes / 1.5 MB</td>
+                </tr>
+                <tr>
+                    <td>$31</td>
+                    <td>%0011 0001</td>
+                    <td>HiROM + FastROM</td>
+                    <td>Final Fantasy 6</td>
+                    <td>3145728 bytes / 3 MB</td>
+                </tr>
+                <tr>
+                    <td>$32</td>
+                    <td>%0011 0010</td>
+                    <td>SDD-1 ROM</td>
+                    <td>Star Ocean</td>
+                    <td>6291456 bytes / 6 MB</td>
+                </tr>
+                <tr>
+                    <td>$35</td>
+                    <td>%0011 0101</td>
+                    <td>ExHiROM</td>
+                    <td>Tales Of Phantasia</td>
+                    <td>6291456 bytes / 6 MB</td>
+                </tr>
+            </table>
+            
+            <p>The bitmask format is 001A0BCD, where:</p>
+            <ul>
+                <li>A == 0 means SlowROM (+ $0), A == 1 means FastROM (+ $10)</li>
+                <li>B == 1 means ExHiROM (+ $4)</li>
+                <li>D == 0 means LoROM (+ $0), D == 1 means HiROM (+ $1)</li>
+            </ul>
+            
+            <h3>Memory Access Speed</h3>
+            <p>Banks $80-$FF can be used for faster memory access. Many portions of memory &lt;$80 are accessed at 2.68 MHz (200 ns). Accessing memory &gt;$80 is done at 3.58 MHz (120 ns) if the value at address $420D (hardware register) is set to 1.</p>
+        </div>
+        
+        <div class="tab-content" id="tab-technical">
+            <h2>Technical Details</h2>
+            
+            <div class="info-section">
+                <h3>RAM and ROM Organization</h3>
+                <p>The SNES memory terminology uses the following units:</p>
+                <ul>
+                    <li><strong>Bank:</strong> 64 Kilobytes (65536 or $10000 bytes), the most significant byte of the 3-byte address the CPU understands</li>
+                    <li><strong>Page:</strong> 256 bytes ($0100 bytes), the smallest mappable unit of the system</li>
+                </ul>
+                <p>With three bytes of address space, the SNES can address up to 16 Megabytes (2^24 = 16777216 Bytes = 16 MB). However, this doesn't mean it has 16MB of RAM - the SNES has 128KB of work RAM (WRAM).</p>
+            </div>
+            
+            <div class="info-section">
+                <h3>LoROM vs HiROM Differences</h3>
+                <p><strong>LoROM:</strong></p>
+                <ul>
+                    <li>ROM is mapped in the upper half of each bank ($8000-$FFFF)</li>
+                    <li>32KB per bank * 128 banks = 4MB maximum</li>
+                    <li>Uses banks $00-$7D</li>
+                    <li>SRAM can be up to 512KB</li>
+                </ul>
+                
+                <p><strong>HiROM:</strong></p>
+                <ul>
+                    <li>ROM is mapped across entire banks</li>
+                    <li>64KB per bank * 64 banks = 4MB maximum</li>
+                    <li>Uses banks $40-$7D</li>
+                    <li>SRAM can be up to 256KB</li>
+                    <li>Lower pages of system banks are already allocated, but higher pages are free, resulting in ROM being mirrored four times</li>
+                </ul>
+            </div>
+            
+            <div class="info-section">
+                <h3>Expansion Chips</h3>
+                <p>Some cartridges contained additional chips to enhance functionality:</p>
+                <ul>
+                    <li><strong>SA-1:</strong> Enhanced CPU that could do bank switching</li>
+                    <li><strong>SDD-1:</strong> Data decompression chip</li>
+                    <li><strong>SuperFX:</strong> Additional processor for 3D rendering</li>
+                </ul>
+                <p>These chips could have their own memory maps and allow for larger ROM sizes (up to 8MB).</p>
+            </div>
+            
+            <div class="info-section">
+                <h3>Memory Shadowing</h3>
+                <p>Memory shadowing occurs when the same physical memory is accessible from multiple address ranges. For example:</p>
+                <ul>
+                    <li>The first 8KB of WRAM (at bank $7E) is shadowed in the first two pages of every bank from $00-$3F</li>
+                    <li>Hardware registers from $00-$3F are shadowed in banks $80-$BF</li>
+                </ul>
+                <p>This allows the same data to be accessed using different addressing modes, which can be important for performance.</p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- NES Tabs -->
+    <div class="tab-container nes-tabs" style="display: none;">
+        <div class="tab-buttons">
+            <div class="tab-button active" data-tab="nes-overview">Overview</div>
+            <div class="tab-button" data-tab="nes-header">NES Header (iNES)</div>
+            <div class="tab-button" data-tab="nes-mappers">Mappers</div>
+            <div class="tab-button" data-tab="nes-technical">Technical Details</div>
+        </div>
+        
+        <div class="tab-content active" id="tab-nes-overview">
+            <h2>About NES Memory Map</h2>
+            <p>The Nintendo Entertainment System (NES) uses a 16-bit address space, capable of addressing up to 64KB of memory. 
+            The CPU memory map is divided into several distinct sections for RAM, cartridge ROM, and various hardware components.</p>
+            
+            <p>The visualization above represents the memory layout where:</p>
+            <ul>
+                <li>The X-axis shows the memory address from $0000 to $FFFF</li>
+            </ul>
+            
+            <p>Unlike the SNES, the NES has a simpler flat memory model, but it uses memory mappers in cartridges to expand beyond the basic 64KB address space limits:</p>
+            
+            <ul>
+                <li><strong>NROM (Mapper 0)</strong>: The simplest mapper with no bank switching, limited to 32KB PRG-ROM and 8KB CHR-ROM.</li>
+                <li><strong>MMC1 (Mapper 1)</strong>: Nintendo's Memory Management Controller 1, allowing up to 512KB PRG-ROM and 256KB CHR-ROM with bankswitching.</li>
+                <li><strong>MMC3 (Mapper 4)</strong>: More advanced mapper allowing bankswitching with IRQ capabilities, used for many later NES games.</li>
+                <li><strong>VRC6 (Mapper 24/26)</strong>: Konami's custom mapper with expanded audio capabilities and bankswitching.</li>
+            </ul>
+            
+            <p>Hover over memory regions in the visualization to see detailed information about each memory section.</p>
+        </div>
+        
+        <div class="tab-content" id="tab-nes-header">
+            <h2>NES ROM Header (iNES Format)</h2>
+            <p>The NES ROM header consists of 16 bytes at the beginning of a ROM file (not within the system's memory map). This header, developed for the iNES emulator, has become the standard for NES ROM identification and provides crucial information about the mapper type, mirroring, and memory configurations.</p>
+            
+            <table>
+                <tr>
+                    <th>Offset</th>
+                    <th>Size</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td>0-3</td>
+                    <td>4 bytes</td><td>Magic string "NES" followed by MS-DOS end-of-file (0x1A)</td>
+                </tr>
+                <tr>
+                    <td>4</td>
+                    <td>1 byte</td>
+                    <td>Number of 16KB PRG-ROM banks</td>
+                </tr>
+                <tr>
+                    <td>5</td>
+                    <td>1 byte</td>
+                    <td>Number of 8KB CHR-ROM banks (0 means CHR-RAM)</td>
+                </tr>
+                <tr>
+                    <td>6</td>
+                    <td>1 byte</td>
+                    <td>ROM Control Byte 1: Mirroring, Memory Mapper (lower bits)</td>
+                </tr>
+                <tr>
+                    <td>7</td>
+                    <td>1 byte</td>
+                    <td>ROM Control Byte 2: Memory Mapper (higher bits), VS/Playchoice, NES 2.0 format</td>
+                </tr>
+                <tr>
+                    <td>8</td>
+                    <td>1 byte</td>
+                    <td>PRG-RAM size (rarely used)</td>
+                </tr>
+                <tr>
+                    <td>9</td>
+                    <td>1 byte</td>
+                    <td>TV system (0 = NTSC, 1 = PAL)</td>
+                </tr>
+                <tr>
+                    <td>10-15</td>
+                    <td>6 bytes</td>
+                    <td>Reserved/unused (should be zero in iNES format)</td>
+                </tr>
+            </table>
+            
+            <h3>Control Byte 1 (Offset 6)</h3>
+            <ul>
+                <li>Bit 0: Mirroring (0 = horizontal, 1 = vertical)</li>
+                <li>Bit 1: Battery-backed RAM present</li>
+                <li>Bit 2: 512-byte trainer present</li>
+                <li>Bit 3: Four-screen VRAM</li>
+                <li>Bits 4-7: Lower nibble of mapper number</li>
+            </ul>
+            
+            <h3>Control Byte 2 (Offset 7)</h3>
+            <ul>
+                <li>Bits 0-3: Upper nibble of mapper number</li>
+                <li>Bit 4: VS Unisystem</li>
+                <li>Bit 5: PlayChoice-10</li>
+                <li>Bits 6-7: If 10, NES 2.0 format</li>
+            </ul>
+            
+            <p>NES 2.0 format extends the header with additional capabilities, including support for more mappers and larger ROM sizes.</p>
+        </div>
+        
+        <div class="tab-content" id="tab-nes-mappers">
+            <h2>NES Mappers</h2>
+            
+            <p>Mappers are specialized chips in NES cartridges that extend the system's capabilities. Here are details about the most common mappers:</p>
+            
+            <table>
+                <tr>
+                    <th>Mapper #</th>
+                    <th>Name</th>
+                    <th>Description</th>
+                    <th>Example Games</th>
+                </tr>
+                <tr>
+                    <td>0</td>
+                    <td>NROM</td>
+                    <td>No mapper. Fixed 16KB/32KB PRG-ROM, 8KB CHR-ROM. Most basic games.</td>
+                    <td>Super Mario Bros., Donkey Kong, Ice Climber</td>
+                </tr>
+                <tr>
+                    <td>1</td>
+                    <td>MMC1 (SxROM)</td>
+                    <td>Nintendo's Memory Management Controller 1. Supports up to 512KB PRG-ROM, 256KB CHR-ROM. Uses serial writes for registers.</td>
+                    <td>The Legend of Zelda, Metroid, Mega Man 2, Final Fantasy</td>
+                </tr>
+                <tr>
+                    <td>2</td>
+                    <td>UxROM</td>
+                    <td>Simple PRG-ROM switching. Up to 512KB PRG-ROM with fixed CHR-ROM/RAM.</td>
+                    <td>Mega Man, Contra, Castlevania</td>
+                </tr>
+                <tr>
+                    <td>3</td>
+                    <td>CNROM</td>
+                    <td>Simple CHR-ROM switching. Fixed PRG-ROM with up to 32KB CHR-ROM.</td>
+                    <td>Arkanoid, Solomon's Key, Spy Hunter</td>
+                </tr>
+                <tr>
+                    <td>4</td>
+                    <td>MMC3 (TxROM)</td>
+                    <td>Advanced mapper with bankswitching and scanline IRQ capabilities. Up to 512KB PRG-ROM, 256KB CHR-ROM.</td>
+                    <td>Super Mario Bros. 2 & 3, Kirby's Adventure, Mega Man 3-6</td>
+                </tr>
+                <tr>
+                    <td>5</td>
+                    <td>MMC5 (ExROM)</td>
+                    <td>Most powerful Nintendo mapper with extended capabilities. Up to 1MB PRG-ROM, 1MB CHR-ROM.</td>
+                    <td>Castlevania 3, Just Breed, Laser Invasion</td>
+                </tr>
+                <tr>
+                    <td>24/26</td>
+                    <td>VRC6</td>
+                    <td>Konami's custom mapper with expanded audio capabilities. Up to 512KB PRG-ROM, 256KB CHR-ROM.</td>
+                    <td>Akumajou Densetsu (JP Castlevania III), Esper Dream 2</td>
+                </tr>
+            </table>
+            
+            <h3>Memory Banking</h3>
+            <p>Mappers use bank switching to expand beyond the 64KB address space by remapping fixed regions of the address space to different portions of a larger ROM. This is typically done through writes to specific memory-mapped registers that control which ROM banks are accessible.</p>
+            
+            <h3>Nametable Mirroring</h3>
+            <p>The PPU (Picture Processing Unit) has 2KB of VRAM for nametables, which is only enough for two nametables. Several mirroring configurations are possible:</p>
+            <ul>
+                <li><strong>Horizontal Mirroring:</strong> Nametables 0 and 1 are duplicates, as are 2 and 3</li>
+                <li><strong>Vertical Mirroring:</strong> Nametables 0 and 2 are duplicates, as are 1 and 3</li>
+                <li><strong>Four-Screen Mirroring:</strong> Uses additional VRAM in the cartridge for 4 unique nametables</li>
+                <li><strong>Single-Screen Mirroring:</strong> All nametables mirror the same area</li>
+            </ul>
+        </div>
+        
+        <div class="tab-content" id="tab-nes-technical">
+            <h2>Technical Details</h2>
+            
+            <div class="info-section">
+                <h3>CPU Memory Map</h3>
+                <p>The NES CPU (a modified MOS 6502) has a 16-bit address bus, allowing it to access 64KB of memory space:</p>
+                <ul>
+                    <li><strong>$0000-$07FF:</strong> 2KB of internal RAM</li>
+                    <li><strong>$0800-$1FFF:</strong> Mirrors of internal RAM</li>
+                    <li><strong>$2000-$2007:</strong> PPU registers</li>
+                    <li><strong>$2008-$3FFF:</strong> Mirrors of PPU registers</li>
+                    <li><strong>$4000-$401F:</strong> APU and I/O registers</li>
+                    <li><strong>$4020-$5FFF:</strong> Expansion ROM</li>
+                    <li><strong>$6000-$7FFF:</strong> SRAM (Save RAM, battery-backed)</li>
+                    <li><strong>$8000-$FFFF:</strong> PRG-ROM (Program ROM)</li>
+                </ul>
+            </div>
+            
+            <div class="info-section">
+                <h3>PPU Memory Map</h3>
+                <p>The Picture Processing Unit (PPU) has its own separate 14-bit address space (16KB):</p>
+                <ul>
+                    <li><strong>$0000-$1FFF:</strong> Pattern Tables (CHR-ROM or CHR-RAM)</li>
+                    <li><strong>$2000-$23FF:</strong> Nametable 0</li>
+                    <li><strong>$2400-$27FF:</strong> Nametable 1</li>
+                    <li><strong>$2800-$2BFF:</strong> Nametable 2</li>
+                    <li><strong>$2C00-$2FFF:</strong> Nametable 3</li>
+                    <li><strong>$3000-$3EFF:</strong> Mirrors of nametables</li>
+                    <li><strong>$3F00-$3F1F:</strong> Palette RAM indexes</li>
+                    <li><strong>$3F20-$3FFF:</strong> Mirrors of palette RAM</li>
+                </ul>
+            </div>
+            
+            <div class="info-section">
+                <h3>Memory Mirroring</h3>
+                <p>The NES makes extensive use of memory mirroring to efficiently use its limited address space:</p>
+                <ul>
+                    <li>The 2KB internal RAM is mirrored three times from $0800-$1FFF</li>
+                    <li>The 8 PPU registers are mirrored every 8 bytes from $2008-$3FFF</li>
+                    <li>The nametable mirroring depends on the cartridge (horizontal, vertical, four-screen)</li>
+                    <li>The palette RAM is mirrored and has internal redundancies</li>
+                </ul>
+                <p>Mirroring allows programmers to use simpler addressing schemes and save valuable ROM space in their code.</p>
+            </div>
+            
+            <div class="info-section">
+                <h3>Cartridge Expansion</h3>
+                <p>Beyond the basic memory map, games could add:</p>
+                <ul>
+                    <li><strong>PRG-RAM:</strong> Battery-backed RAM for game saves (often at $6000-$7FFF)</li>
+                    <li><strong>Expansion ROM:</strong> Additional ROM used by some mappers/games ($4020-$5FFF)</li>
+                    <li><strong>Custom Audio:</strong> Special mappers like VRC6, VRC7, MMC5 added sound channels</li>
+                    <li><strong>Coprocessors:</strong> Some mappers provided additional processing capabilities</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Combined Memory Map Data Structure
+        const memoryMapData = {
+            // SNES Memory Maps
+            lorom: [
+                // Bank $00-$3F
+                { bankStart: 0x00, bankEnd: 0x3F, offsetStart: 0x0000, offsetEnd: 0x1FFF, definition: "LowRAM", type: "ram", 
+                  romAddress: "No ROM mapping", shadowing: "$7E (First two pages of WRAM)", 
+                  description: "First 8KB of work RAM, mirrored in first banks" },
+                
+                { bankStart: 0x00, bankEnd: 0x3F, offsetStart: 0x2000, offsetEnd: 0x20FF, definition: "Unused", type: "unused", 
+                  romAddress: "No ROM mapping", shadowing: "$80-$BF", 
+                  description: "Unused memory area" },
+                
+                { bankStart: 0x00, bankEnd: 0x3F, offsetStart: 0x2100, offsetEnd: 0x21FF, definition: "PPU1, APU registers", type: "hardware", 
+                  romAddress: "No ROM mapping", shadowing: "$80-$BF", 
+                  description: "Hardware registers for Picture Processing Unit 1, Audio Processing Unit" },
+                
+                { bankStart: 0x00, bankEnd: 0x3F, offsetStart: 0x2200, offsetEnd: 0x2FFF, definition: "Unused", type: "unused", 
+                  romAddress: "No ROM mapping", shadowing: "$80-$BF",
+                  description: "Unused memory area" },
+                
+                { bankStart: 0x00, bankEnd: 0x3F, offsetStart: 0x3000, offsetEnd: 0x3FFF, definition: "DSP, SuperFX registers", type: "hardware", 
+                  romAddress: "No ROM mapping", shadowing: "$80-$BF",
+                  description: "Hardware registers for DSP and SuperFX chips" },
+                
+                { bankStart: 0x00, bankEnd: 0x3F, offsetStart: 0x4000, offsetEnd: 0x40FF, definition: "Old Style Joypad Regs", type: "hardware", 
+                  romAddress: "No ROM mapping", shadowing: "$80-$BF",
+                  description: "Registers for reading controller input" },
+                
+                { bankStart: 0x00, bankEnd: 0x3F, offsetStart: 0x4100, offsetEnd: 0x41FF, definition: "Unused", type: "unused", 
+                  romAddress: "No ROM mapping", shadowing: "$80-$BF",
+                  description: "Unused memory area" },
+                
+                { bankStart: 0x00, bankEnd: 0x3F, offsetStart: 0x4200, offsetEnd: 0x44FF, definition: "DMA, PPU2 registers", type: "hardware", 
+                  romAddress: "No ROM mapping", shadowing: "$80-$BF",
+                  description: "Hardware registers for DMA controller and Picture Processing Unit 2" },
+                
+                { bankStart: 0x00, bankEnd: 0x3F, offsetStart: 0x4500, offsetEnd: 0x5FFF, definition: "Unused", type: "unused", 
+                  romAddress: "No ROM mapping", shadowing: "$80-$BF",
+                  description: "Unused memory area" },
+                
+                { bankStart: 0x00, bankEnd: 0x3F, offsetStart: 0x6000, offsetEnd: 0x7FFF, definition: "RESERVED (enhancement chips)", type: "reserved", 
+                  romAddress: "No ROM mapping", shadowing: "$80-$BF",
+                  description: "Reserved for expansion chips in cartridges" },
+                
+                { bankStart: 0x00, bankEnd: 0x3F, offsetStart: 0x8000, offsetEnd: 0xFFFF, definition: "LoROM section (program memory)", type: "rom", 
+                  romAddress: "Various", shadowing: "$80-$BF",
+                  description: "Cartridge ROM - program and data" },
+                
+                // Bank $40-$6F
+                { bankStart: 0x40, bankEnd: 0x6F, offsetStart: 0x0000, offsetEnd: 0x7FFF, definition: "May be mapped as higher bank", type: "unused", 
+                  romAddress: "Unmapped or $C0-$EF", shadowing: "$C0-$EF",
+                  description: "Potentially mapped ROM data, depending on cartridge" },
+                
+                { bankStart: 0x40, bankEnd: 0x6F, offsetStart: 0x8000, offsetEnd: 0xFFFF, definition: "LoROM section (program memory)", type: "rom", 
+                  romAddress: "Various", shadowing: "$C0-$EF",
+                  description: "Cartridge ROM - program and data" },
+                
+                // Bank $70-$7D
+                { bankStart: 0x70, bankEnd: 0x7D, offsetStart: 0x0000, offsetEnd: 0x7FFF, definition: "Cartridge SRAM", type: "sram", 
+                  romAddress: "No ROM mapping", shadowing: "$F0-$FD",
+                  description: "Save RAM - up to 448KB maximum" },
+                
+                { bankStart: 0x70, bankEnd: 0x7D, offsetStart: 0x8000, offsetEnd: 0xFFFF, definition: "LoROM section (program memory)", type: "rom",romAddress: "Various", shadowing: "$F0-$FD",
+                  description: "Cartridge ROM - program and data" },
+                
+                // Bank $7E
+                { bankStart: 0x7E, bankEnd: 0x7E, offsetStart: 0x0000, offsetEnd: 0x1FFF, definition: "LowRAM (WRAM)", type: "ram", 
+                  romAddress: "No ROM mapping", shadowing: "$00-$3F (First two pages of WRAM)",
+                  description: "Work RAM - first 8KB" },
+                
+                { bankStart: 0x7E, bankEnd: 0x7E, offsetStart: 0x2000, offsetEnd: 0x7FFF, definition: "HighRAM (WRAM)", type: "ram", 
+                  romAddress: "No ROM mapping", shadowing: "No mapping",
+                  description: "Work RAM - next 24KB" },
+                
+                { bankStart: 0x7E, bankEnd: 0x7E, offsetStart: 0x8000, offsetEnd: 0xFFFF, definition: "Extended RAM (WRAM)", type: "ram", 
+                  romAddress: "No ROM mapping", shadowing: "No mapping",
+                  description: "Work RAM - next 32KB" },
+                
+                // Bank $7F
+                { bankStart: 0x7F, bankEnd: 0x7F, offsetStart: 0x0000, offsetEnd: 0xFFFF, definition: "Extended RAM (WRAM)", type: "ram", 
+                  romAddress: "No ROM mapping", shadowing: "No mapping",
+                  description: "Work RAM - additional 64KB" },
+                
+                // Bank $80-$BF (mirrors of $00-$3F)
+                { bankStart: 0x80, bankEnd: 0xBF, offsetStart: 0x0000, offsetEnd: 0x1FFF, definition: "Mirror of $00-$3F LowRAM", type: "mirror", 
+                  romAddress: "See banks $00-$3F", shadowing: "$00-$3F",
+                  description: "Mirror of banks $00-$3F LowRAM" },
+                
+                { bankStart: 0x80, bankEnd: 0xBF, offsetStart: 0x2000, offsetEnd: 0x7FFF, definition: "Mirror of $00-$3F Hardware/Unused", type: "mirror", 
+                  romAddress: "See banks $00-$3F", shadowing: "$00-$3F",
+                  description: "Mirror of banks $00-$3F hardware registers and unused areas" },
+                
+                { bankStart: 0x80, bankEnd: 0xBF, offsetStart: 0x8000, offsetEnd: 0xFFFF, definition: "Mirror of $00-$3F ROM", type: "mirror", 
+                  romAddress: "See banks $00-$3F", shadowing: "$00-$3F",
+                  description: "Mirror of banks $00-$3F ROM section" },
+                
+                // Bank $C0-$EF (mirrors of $40-$6F)
+                { bankStart: 0xC0, bankEnd: 0xEF, offsetStart: 0x0000, offsetEnd: 0xFFFF, definition: "Mirror of $40-$6F", type: "mirror", 
+                  romAddress: "See banks $40-$6F", shadowing: "$40-$6F",
+                  description: "Mirror of banks $40-$6F" },
+                
+                // Bank $F0-$FD (mirrors of $70-$7D)
+                { bankStart: 0xF0, bankEnd: 0xFD, offsetStart: 0x0000, offsetEnd: 0xFFFF, definition: "Mirror of $70-$7D", type: "mirror", 
+                  romAddress: "See banks $70-$7D", shadowing: "$70-$7D",
+                  description: "Mirror of banks $70-$7D" },
+                
+                // Bank $FE-$FF
+                { bankStart: 0xFE, bankEnd: 0xFF, offsetStart: 0x0000, offsetEnd: 0x7FFF, definition: "Cartridge SRAM", type: "sram", 
+                  romAddress: "No ROM mapping", shadowing: "No mapping",
+                  description: "Additional SRAM - 64KB (512KB total)" },
+                
+                { bankStart: 0xFE, bankEnd: 0xFF, offsetStart: 0x8000, offsetEnd: 0xFFFF, definition: "LoROM section", type: "rom", 
+                  romAddress: "No mapping", shadowing: "No mapping",
+                  description: "ROM data (these banks were overridden by WRAM in the <$7F range)" }
+            ],
+            
+            hirom: [
+                // Bank $00-$1F
+                { bankStart: 0x00, bankEnd: 0x1F, offsetStart: 0x0000, offsetEnd: 0x1FFF, definition: "LowRAM", type: "ram", 
+                romAddress: "No ROM mapping", shadowing: "$7E (First two pages of WRAM)",
+                description: "First 8KB of work RAM, mirrored in first banks" },
+                
+                { bankStart: 0x00, bankEnd: 0x1F, offsetStart: 0x2000, offsetEnd: 0x20FF, definition: "Unused", type: "unused", 
+                romAddress: "No ROM mapping", shadowing: "$80–$9F",
+                description: "Unused memory area" },
+                
+                { bankStart: 0x00, bankEnd: 0x1F, offsetStart: 0x2100, offsetEnd: 0x21FF, definition: "PPU1, APU registers", type: "hardware", 
+                romAddress: "No ROM mapping", shadowing: "$80–$9F",
+                description: "Hardware registers for Picture Processing Unit 1, Audio Processing Unit" },
+                
+                { bankStart: 0x00, bankEnd: 0x1F, offsetStart: 0x2200, offsetEnd: 0x2FFF, definition: "Unused", type: "unused", 
+                romAddress: "No ROM mapping", shadowing: "$80–$9F",
+                description: "Unused memory area" },
+                
+                { bankStart: 0x00, bankEnd: 0x1F, offsetStart: 0x3000, offsetEnd: 0x3FFF, definition: "DSP, SuperFX registers", type: "hardware", 
+                romAddress: "No ROM mapping", shadowing: "$80–$9F",
+                description: "Hardware registers for DSP and SuperFX chips" },
+                
+                { bankStart: 0x00, bankEnd: 0x1F, offsetStart: 0x4000, offsetEnd: 0x40FF, definition: "Old Style Joypad Regs", type: "hardware", 
+                romAddress: "No ROM mapping", shadowing: "$80–$9F",
+                description: "Registers for reading controller input" },
+                
+                { bankStart: 0x00, bankEnd: 0x1F, offsetStart: 0x4100, offsetEnd: 0x41FF, definition: "Unused", type: "unused", 
+                romAddress: "No ROM mapping", shadowing: "$80–$9F",
+                description: "Unused memory area" },
+                
+                { bankStart: 0x00, bankEnd: 0x1F, offsetStart: 0x4200, offsetEnd: 0x44FF, definition: "DMA, PPU2 registers", type: "hardware", 
+                romAddress: "No ROM mapping", shadowing: "$80–$9F",
+                description: "Hardware registers for DMA controller and Picture Processing Unit 2" },
+                
+                { bankStart: 0x00, bankEnd: 0x1F, offsetStart: 0x4500, offsetEnd: 0x5FFF, definition: "Unused", type: "unused", 
+                romAddress: "No ROM mapping", shadowing: "$80–$9F",
+                description: "Unused memory area" },
+                
+                { bankStart: 0x00, bankEnd: 0x1F, offsetStart: 0x6000, offsetEnd: 0x7FFF, definition: "RESERVED", type: "reserved", 
+                romAddress: "No ROM mapping", shadowing: "$80–$9F",
+                description: "Reserved memory area" },
+                
+                { bankStart: 0x00, bankEnd: 0x1F, offsetStart: 0x8000, offsetEnd: 0xFFFF, definition: "HiROM section", type: "rom", 
+                romAddress: "$00:8000-$1F:FFFF", shadowing: "$80–$9F",
+                description: "Cartridge ROM - program and data" },
+                
+                // Bank $20-$3F
+                { bankStart: 0x20, bankEnd: 0x3F, offsetStart: 0x0000, offsetEnd: 0x1FFF, definition: "LowRAM", type: "ram", 
+                romAddress: "No ROM mapping", shadowing: "$7E (First two pages of WRAM)",
+                description: "First 8KB of work RAM, mirrored in first banks" },
+                
+                { bankStart: 0x20, bankEnd: 0x3F, offsetStart: 0x2000, offsetEnd: 0x5FFF, definition: "Hardware Registers", type: "hardware", 
+                romAddress: "No ROM mapping", shadowing: "$A0-$BF",
+                description: "Various hardware register regions mirrored" },
+                
+                { bankStart: 0x20, bankEnd: 0x3F, offsetStart: 0x6000, offsetEnd: 0x7FFF, definition: "Cartridge SRAM", type: "sram", 
+                romAddress: "No ROM mapping", shadowing: "$A0-$BF",
+                description: "Save RAM - 8KB per bank (256KB total)" },
+                
+                { bankStart: 0x20, bankEnd: 0x3F, offsetStart: 0x8000, offsetEnd: 0xFFFF, definition: "HiROM section", type: "rom", 
+                romAddress: "$20:8000-$3F:FFFF", shadowing: "$A0-$BF",
+                description: "Cartridge ROM - program and data" },
+                
+                // Banks $40-$7D
+                { bankStart: 0x40, bankEnd: 0x7D, offsetStart: 0x0000, offsetEnd: 0xFFFF, definition: "HiROM section", type: "rom", 
+                romAddress: "$40:0000-$7D:FFFF", shadowing: "$C0-$FD",
+                description: "Cartridge ROM - program and data, full 64KB banks" },
+                
+                // Bank $7E (WRAM)
+                { bankStart: 0x7E, bankEnd: 0x7E, offsetStart: 0x0000, offsetEnd: 0x1FFF, definition: "LowRAM (WRAM)", type: "ram", 
+                romAddress: "No ROM mapping", shadowing: "$00-$3F (First two pages of WRAM)",
+                description: "Work RAM - first 8KB" },
+                
+                { bankStart: 0x7E, bankEnd: 0x7E, offsetStart: 0x2000, offsetEnd: 0x7FFF, definition: "HighRAM (WRAM)", type: "ram", 
+                romAddress: "No ROM mapping", shadowing: "No mapping",
+                description: "Work RAM - next 24KB" },
+                
+                { bankStart: 0x7E, bankEnd: 0x7E, offsetStart: 0x8000, offsetEnd: 0xFFFF, definition: "Expanded RAM (WRAM)", type: "ram", 
+                romAddress: "No ROM mapping", shadowing: "No mapping",
+                description: "Work RAM - next 32KB" },
+                
+                // Bank $7F (WRAM extension)
+                { bankStart: 0x7F, bankEnd: 0x7F, offsetStart: 0x0000, offsetEnd: 0xFFFF, definition: "Expanded RAM (WRAM)", type: "ram", 
+                romAddress: "No ROM mapping", shadowing: "No mapping",
+                description: "Work RAM - additional 64KB" },
+                
+                // Banks $80-$9F (mirrors of $00-$1F)
+                { bankStart: 0x80, bankEnd: 0x9F, offsetStart: 0x0000, offsetEnd: 0xFFFF, definition: "Mirror of $00-$1F", type: "mirror", 
+                romAddress: "See banks $00-$1F", shadowing: "$00-$1F",
+                description: "Mirror of banks $00-$1F with potential FastROM access" },
+                
+                // Banks $A0-$BF (mirrors of $20-$3F)
+                { bankStart: 0xA0, bankEnd: 0xBF, offsetStart: 0x0000, offsetEnd: 0xFFFF, definition: "Mirror of $20-$3F", type: "mirror", 
+                romAddress: "See banks $20-$3F", shadowing: "$20-$3F",
+                description: "Mirror of banks $20-$3F with potential FastROM access" },
+                
+                // Banks $C0-$FD (mirrors of $40-$7D)
+                { bankStart: 0xC0, bankEnd: 0xFD, offsetStart: 0x0000, offsetEnd: 0xFFFF, definition: "Mirror of $40-$7D", type: "mirror", 
+                romAddress: "See banks $40-$7D", shadowing: "$40-$7D",
+                description: "Mirror of banks $40-$7D with potential FastROM access" },
+                
+                // Banks $FE-$FF
+                { bankStart: 0xFE, bankEnd: 0xFF, offsetStart: 0x0000, offsetEnd: 0xFFFF, definition: "HiROM section", type: "rom", 
+                romAddress: "No mapping", shadowing: "No mapping",
+                description: "ROM data (these banks were overridden by WRAM in the <$7F range)" }
+            ],
+
+            exlorom: [
+                // System and RAM areas
+                { bankStart: 0x00, bankEnd: 0x3F, offsetStart: 0x0000, offsetEnd: 0x7FFF, definition: "System Area (RAM/Registers)", type: "ram", 
+                romAddress: "No ROM mapping", shadowing: "Various",
+                description: "System RAM, hardware registers, and reserved areas (similar to LoROM)" },
+                
+                // First 4MB ROM mapping (same as LoROM)
+                { bankStart: 0x00, bankEnd: 0x3F, offsetStart: 0x8000, offsetEnd: 0xFFFF, definition: "ExLoROM - First 4MB", type: "rom", 
+                romAddress: "$000000-$3FFFFF", shadowing: "$80-$BF",
+                description: "First 4MB of ROM, mapped in upper half of banks $00-$3F" },
+                
+                // Second 4MB ROM mapping - extended part
+                { bankStart: 0x40, bankEnd: 0x7D, offsetStart: 0x0000, offsetEnd: 0x7FFF, definition: "ExLoROM - Lower Half Extension", type: "unused", 
+                romAddress: "May be unused", shadowing: "$C0-$FD",
+                description: "Lower half of banks, may be unused or mapped depending on cartridge" },
+                
+                { bankStart: 0x40, bankEnd: 0x7D, offsetStart: 0x8000, offsetEnd: 0xFFFF, definition: "ExLoROM - Second 4MB", type: "rom", 
+                romAddress: "$400000-$7DFFFF", shadowing: "$C0-$FD",
+                description: "Additional 4MB of ROM in upper half of banks $40-$7D" },
+                
+                // SRAM areas
+                { bankStart: 0x70, bankEnd: 0x7D, offsetStart: 0x0000, offsetEnd: 0x7FFF, definition: "Cartridge SRAM", type: "sram", 
+                romAddress: "No ROM mapping", shadowing: "$F0-$FD",
+                description: "Save RAM - up to 448KB maximum" },
+                
+                // WRAM banks
+                { bankStart: 0x7E, bankEnd: 0x7F, offsetStart: 0x0000, offsetEnd: 0xFFFF, definition: "WRAM", type: "ram", 
+                romAddress: "No ROM mapping", shadowing: "Various",
+                description: "Work RAM - 128KB total" },
+                
+                // Mirrors of system and ROM areas
+                { bankStart: 0x80, bankEnd: 0xBF, offsetStart: 0x0000, offsetEnd: 0x7FFF, definition: "Mirror of $00-$3F System Area", type: "mirror", 
+                romAddress: "No ROM mapping", shadowing: "$00-$3F",
+                description: "Mirror of system area with potential FastROM access" },
+                
+                { bankStart: 0x80, bankEnd: 0xBF, offsetStart: 0x8000, offsetEnd: 0xFFFF, definition: "Mirror of First 4MB ROM", type: "mirror", 
+                romAddress: "$000000-$3FFFFF", shadowing: "$00-$3F",
+                description: "Mirror of first 4MB ROM with potential FastROM access" },
+                
+                { bankStart: 0xC0, bankEnd: 0xFD, offsetStart: 0x0000, offsetEnd: 0x7FFF, definition: "Mirror of $40-$7D Lower Half", type: "mirror", 
+                romAddress: "May be unused", shadowing: "$40-$7D",
+                description: "Mirror of $40-$7D lower half with potential FastROM access" },
+                
+                { bankStart: 0xC0, bankEnd: 0xFD, offsetStart: 0x8000, offsetEnd: 0xFFFF, definition: "Mirror of Second 4MB ROM", type: "mirror", 
+                romAddress: "$400000-$7DFFFF", shadowing: "$40-$7D",
+                description: "Mirror of second 4MB ROM with potential FastROM access" },
+                
+                // SRAM mirrors
+                { bankStart: 0xF0, bankEnd: 0xFD, offsetStart: 0x0000, offsetEnd: 0x7FFF, definition: "Mirror of SRAM", type: "mirror", 
+                romAddress: "No ROM mapping", shadowing: "$70-$7D",
+                description: "Mirror of SRAM with potential FastROM access" },
+                
+                // Additional ROM/SRAM areas
+                { bankStart: 0xFE, bankEnd: 0xFF, offsetStart: 0x0000, offsetEnd: 0x7FFF, definition: "Additional SRAM", type: "sram", 
+                romAddress: "No ROM mapping", shadowing: "No mapping",
+                description: "Additional SRAM - 64KB (512KB total)" },
+                
+                { bankStart: 0xFE, bankEnd: 0xFF, offsetStart: 0x8000, offsetEnd: 0xFFFF, definition: "Additional ROM", type: "rom", 
+                romAddress: "Special mapping", shadowing: "No mapping",
+                description: "ROM data in banks otherwise overridden by WRAM" }
+            ],
+
+            exhirom: [
+                // System and RAM areas
+                { bankStart: 0x00, bankEnd: 0x3F, offsetStart: 0x0000, offsetEnd: 0x7FFF, definition: "System Area (RAM/Registers)", type: "ram", 
+                romAddress: "No ROM mapping", shadowing: "Various",
+                description: "System RAM, hardware registers, and reserved areas (similar to HiROM)" },
+                
+                // First part of ROM mapping
+                { bankStart: 0x00, bankEnd: 0x3F, offsetStart: 0x8000, offsetEnd: 0xFFFF, definition: "ExHiROM - First Part", type: "rom", 
+                romAddress: "$400000-$7FFFFF", shadowing: "$80-$BF",
+                description: "First part of ROM, 4MB mapped to the upper half of banks $00-$3F" },
+                
+                // Second part of ROM mapping - full banks
+                { bankStart: 0x40, bankEnd: 0x7D, offsetStart: 0x0000, offsetEnd: 0xFFFF, definition: "ExHiROM - Second Part", type: "rom", 
+                romAddress: "$000000-$3DFFFF", shadowing: "$C0-$FD",
+                description: "Second part of ROM, full banks $40-$7D (4MB)" },
+                
+                // SRAM area
+                { bankStart: 0x20, bankEnd: 0x3F, offsetStart: 0x6000, offsetEnd: 0x7FFF, definition: "Cartridge SRAM", type: "sram", 
+                romAddress: "No ROM mapping", shadowing: "$A0-$BF",
+                description: "Save RAM - up to 256KB total" },
+                
+                // WRAM banks
+                { bankStart: 0x7E, bankEnd: 0x7F, offsetStart: 0x0000, offsetEnd: 0xFFFF, definition: "WRAM", type: "ram", 
+                romAddress: "No ROM mapping", shadowing: "Various",
+                description: "Work RAM - 128KB total" },
+                
+                // Mirrors of system area
+                { bankStart: 0x80, bankEnd: 0xBF, offsetStart: 0x0000, offsetEnd: 0x7FFF, definition: "Mirror of System Area", type: "mirror", 
+                romAddress: "No ROM mapping", shadowing: "$00-$3F",
+                description: "Mirror of system area with potential FastROM access" },
+                
+                // Mirrors of ROM areas with potential FastROM access
+                { bankStart: 0x80, bankEnd: 0xBF, offsetStart: 0x8000, offsetEnd: 0xFFFF, definition: "Mirror of First Part", type: "mirror", 
+                romAddress: "$400000-$7FFFFF", shadowing: "$00-$3F",
+                description: "Mirror of first part with potential FastROM access" },
+                
+                { bankStart: 0xC0, bankEnd: 0xFD, offsetStart: 0x0000, offsetEnd: 0xFFFF, definition: "Mirror of Second Part", type: "mirror", 
+                romAddress: "$000000-$3DFFFF", shadowing: "$40-$7D",
+                description: "Mirror of second part with potential FastROM access" },
+                
+                // Additional ROM
+                { bankStart: 0xFE, bankEnd: 0xFF, offsetStart: 0x0000, offsetEnd: 0xFFFF, definition: "Additional ROM", type: "rom", 
+                romAddress: "$3E0000-$3FFFFF", shadowing: "No mapping",
+                description: "Final part of ROM in otherwise unused banks" }
+            ],
+            
+            // NES Memory Maps
+            nes_nrom: [
+                // CPU Memory Map
+                { offsetStart: 0x0000, offsetEnd: 0x07FF, definition: "Internal RAM", type: "ram", 
+                  romAddress: "No ROM mapping", mirroring: "$0800-$1FFF",
+                  description: "2KB of internal work RAM" },
+                
+                { offsetStart: 0x0800, offsetEnd: 0x1FFF, definition: "RAM Mirrors", type: "mirror", 
+                  romAddress: "No ROM mapping", mirroring: "Mirrors of $0000-$07FF",
+                  description: "Three mirrors of internal RAM. Each 2KB section repeats." },
+                
+                { offsetStart: 0x2000, offsetEnd: 0x2007, definition: "PPU Registers", type: "hardware", 
+                  romAddress: "No ROM mapping", mirroring: "$2008-$3FFF",
+                  description: "8 bytes of PPU registers for controlling graphics" },
+                
+                { offsetStart: 0x2008, offsetEnd: 0x3FFF, definition: "PPU Register Mirrors", type: "mirror", 
+                  romAddress: "No ROM mapping", mirroring: "Mirrors of $2000-$2007",
+                  description: "Mirrors of the 8 PPU registers, repeating every 8 bytes" },
+                
+                { offsetStart: 0x4000, offsetEnd: 0x401F, definition: "APU and I/O Registers", type: "hardware", 
+                  romAddress: "No ROM mapping", mirroring: "No mirroring",
+                  description: "Audio Processing Unit and I/O registers (controllers)" },
+                
+                { offsetStart: 0x4020, offsetEnd: 0x5FFF, definition: "Expansion ROM", type: "unused", 
+                  romAddress: "Unmapped in NROM", mirroring: "No mirroring",
+                  description: "Cartridge expansion ROM area (unused in NROM)" },
+                
+                { offsetStart: 0x6000, offsetEnd: 0x7FFF, definition: "SRAM (Battery-backed)", type: "sram", 
+                  romAddress: "No ROM mapping", mirroring: "No mirroring",
+                  description: "8KB of Save RAM, often battery-backed" },
+                
+                { offsetStart: 0x8000, offsetEnd: 0xBFFF, definition: "PRG-ROM (Lower Bank)", type: "rom", 
+                  romAddress: "First 16KB of ROM", mirroring: "None in 32KB configuration",
+                  description: "First 16KB of program ROM" },
+                
+                { offsetStart: 0xC000, offsetEnd: 0xFFFF, definition: "PRG-ROM (Upper Bank)", type: "rom", 
+                  romAddress: "Second 16KB of ROM or mirror", mirroring: "Mirror of $8000-$BFFF in 16KB configuration",
+                  description: "Second 16KB of program ROM or mirror of lower bank in 16KB games" },
+                
+                // PPU Memory Map (shown as a separate part of the visualization)
+                { offsetStart: 0x10000, offsetEnd: 0x1FFF + 0x10000, definition: "CHR-ROM / Pattern Tables", type: "vram", 
+                  romAddress: "CHR-ROM from cartridge", mirroring: "No mirroring",
+                  description: "8KB of Character ROM containing tile data for graphics" },
+                
+                { offsetStart: 0x2000 + 0x10000, offsetEnd: 0x23FF + 0x10000, definition: "Nametable 0", type: "vram", 
+                  romAddress: "No ROM mapping", mirroring: "Depends on cartridge",
+                  description: "1KB nametable for background layout" },
+                
+                { offsetStart: 0x2400 + 0x10000, offsetEnd: 0x27FF + 0x10000, definition: "Nametable 1", type: "vram", 
+                  romAddress: "No ROM mapping", mirroring: "Depends on cartridge",
+                  description: "1KB nametable for background layout" },
+                
+                { offsetStart: 0x2800 + 0x10000, offsetEnd: 0x2BFF + 0x10000, definition: "Nametable 2", type: "vram", 
+                  romAddress: "No ROM mapping", mirroring: "Depends on cartridge",
+                  description: "1KB nametable for background layout" },
+                
+                { offsetStart: 0x2C00 + 0x10000, offsetEnd: 0x2FFF + 0x10000, definition: "Nametable 3", type: "vram", 
+                  romAddress: "No ROM mapping", mirroring: "Depends on cartridge",
+                  description: "1KB nametable for background layout" },
+                
+                { offsetStart: 0x3000 + 0x10000, offsetEnd: 0x3EFF + 0x10000, definition: "Nametable Mirrors", type: "mirror", 
+                  romAddress: "No ROM mapping", mirroring: "Mirrors of $2000-$2EFF",
+                  description: "Mirrors of nametables" },
+                
+                { offsetStart: 0x3F00 + 0x10000, offsetEnd: 0x3F1F + 0x10000, definition: "Palette RAM", type: "vram", 
+                  romAddress: "No ROM mapping", mirroring: "$3F20-$3FFF",
+                  description: "32 bytes of color palette data" },
+                
+                { offsetStart: 0x3F20 + 0x10000, offsetEnd: 0x3FFF + 0x10000, definition: "Palette Mirrors", type: "mirror", 
+                  romAddress: "No ROM mapping", mirroring: "Mirrors of $3F00-$3F1F",
+                  description: "Mirrors of palette RAM" }
+            ],
+            
+            nes_mmc1: [
+                // CPU Memory Map - Basic structure similar to NROM but with banking
+                { offsetStart: 0x0000, offsetEnd: 0x1FFF, definition: "Internal RAM and Mirrors", type: "ram", 
+                  romAddress: "No ROM mapping", mirroring: "Mirrors every 2KB",
+                  description: "2KB of internal RAM mirrored 4 times" },
+                
+                { offsetStart: 0x2000, offsetEnd: 0x3FFF, definition: "PPU Registers and Mirrors", type: "hardware", 
+                  romAddress: "No ROM mapping", mirroring: "Mirrors every 8 bytes",
+                  description: "PPU registers mirrored throughout this region" },
+                
+                { offsetStart: 0x4000, offsetEnd: 0x401F, definition: "APU and I/O Registers", type: "hardware", 
+                  romAddress: "No ROM mapping", mirroring: "No mirroring",
+                  description: "Audio and I/O control registers" },
+                
+                { offsetStart: 0x4020, offsetEnd: 0x5FFF, definition: "Expansion ROM", type: "unused", 
+                  romAddress: "Not used in MMC1", mirroring: "No mirroring",
+                  description: "Unused expansion area in MMC1 cartridges" },
+                
+                { offsetStart: 0x6000, offsetEnd: 0x7FFF, definition: "PRG-RAM / Battery RAM", type: "sram", 
+                  romAddress: "No ROM mapping", mirroring: "No mirroring",
+                  description: "8KB of cartridge RAM, often battery-backed for saves" },
+                
+                { offsetStart: 0x8000, offsetEnd: 0xBFFF, definition: "PRG-ROM Switchable Bank", type: "rom", 
+                  romAddress: "Switchable 16KB bank", mirroring: "No mirroring",
+                  description: "16KB switchable PRG-ROM bank controlled by MMC1 registers" },
+                
+                { offsetStart: 0xC000, offsetEnd: 0xFFFF, definition: "PRG-ROM Fixed/Switchable Bank", type: "rom", 
+                  romAddress: "Fixed or switchable 16KB bank", mirroring: "No mirroring",
+                  description: "16KB PRG-ROM bank, either fixed to last bank or switchable based on mode" },
+                
+                // PPU Memory Map with bankable CHR ROM
+                { offsetStart: 0x10000, offsetEnd: 0x1FFF + 0x10000, definition: "CHR Bank 0 & 1 (Switchable)", type: "vram", 
+                  romAddress: "Switchable 4KB/8KB CHR banks", mirroring: "No mirroring",
+                  description: "8KB of Character ROM that can be switched in 4KB or 8KB chunks" },
+                
+                // Nametables with configurable mirroring
+                { offsetStart: 0x2000 + 0x10000, offsetEnd: 0x2FFF + 0x10000, definition: "Nametables with Configurable Mirroring", type: "vram", 
+                  romAddress: "No ROM mapping", mirroring: "Horizontal, Vertical, or Single Screen (configurable)",
+                  description: "4 nametables with mirroring configured by MMC1 registers" },
+                
+                { offsetStart: 0x3000 + 0x10000, offsetEnd: 0x3EFF + 0x10000, definition: "Nametable Mirrors", type: "mirror", 
+                  romAddress: "No ROM mapping", mirroring: "Mirrors of $2000-$2EFF",
+                  description: "Mirrors of nametables" },
+                
+                { offsetStart: 0x3F00 + 0x10000, offsetEnd: 0x3FFF + 0x10000, definition: "Palette RAM and Mirrors", type: "vram", 
+                  romAddress: "No ROM mapping", mirroring: "Various internal mirrors",
+                  description: "Palette data with mirrors" }
+            ],
+            
+            nes_mmc3: [
+                // CPU Memory Map
+                { offsetStart: 0x0000, offsetEnd: 0x1FFF, definition: "Internal RAM and Mirrors", type: "ram", 
+                  romAddress: "No ROM mapping", mirroring: "Mirrors every 2KB",
+                  description: "2KB of internal RAM mirrored 4 times" },
+                
+                { offsetStart: 0x2000, offsetEnd: 0x3FFF, definition: "PPU Registers and Mirrors", type: "hardware", 
+                  romAddress: "No ROM mapping", mirroring: "Mirrors every 8 bytes",
+                  description: "PPU registers mirrored throughout this region" },
+                
+                { offsetStart: 0x4000, offsetEnd: 0x401F, definition: "APU and I/O Registers", type: "hardware", 
+                  romAddress: "No ROM mapping", mirroring: "No mirroring",
+                  description: "Audio and I/O control registers" },
+                
+                { offsetStart: 0x4020, offsetEnd: 0x5FFF, definition: "Expansion ROM", type: "unused", 
+                  romAddress: "Not used in MMC3", mirroring: "No mirroring",
+                  description: "Unused expansion area in MMC3 cartridges" },
+                
+                { offsetStart: 0x6000, offsetEnd: 0x7FFF, definition: "PRG-RAM / Battery RAM", type: "sram", 
+                  romAddress: "No ROM mapping", mirroring: "No mirroring",
+                  description: "8KB of cartridge RAM, often battery-backed for saves" },
+                
+                { offsetStart: 0x8000, offsetEnd: 0x9FFF, definition: "PRG-ROM Bank 0 (Switchable)", type: "rom", 
+                  romAddress: "Switchable 8KB bank", mirroring: "No mirroring",
+                  description: "8KB switchable PRG-ROM bank" },
+                
+                { offsetStart: 0xA000, offsetEnd: 0xBFFF, definition: "PRG-ROM Bank 1 (Switchable)", type: "rom", 
+                  romAddress: "Switchable 8KB bank", mirroring: "No mirroring",
+                  description: "8KB switchable PRG-ROM bank" },
+                
+                { offsetStart: 0xC000, offsetEnd: 0xDFFF, definition: "PRG-ROM Bank 2 (Fixed/Switchable)", type: "rom", 
+                  romAddress: "Fixed or switchable 8KB bank", mirroring: "No mirroring",
+                  description: "8KB PRG-ROM bank, switchable or fixed depending on mode" },
+                
+                { offsetStart: 0xE000, offsetEnd: 0xFFFF, definition: "PRG-ROM Bank 3 (Fixed)", type: "rom", 
+                  romAddress: "Fixed to last 8KB bank", mirroring: "No mirroring",
+                  description: "8KB PRG-ROM bank, fixed to last bank" },
+                
+                // PPU Memory Map with bankable CHR ROM
+                { offsetStart: 0x10000, offsetEnd: 0x11FFF + 0x10000, definition: "CHR Bank 0-1 (2KB each, Switchable)", type: "vram", 
+                  romAddress: "Switchable 2KB CHR banks", mirroring: "No mirroring",
+                  description: "2KB chunks of Character ROM that can be independently switched" },
+                
+                { offsetStart: 0x1000 + 0x10000, offsetEnd: 0x1FFF + 0x10000, definition: "CHR Bank 2-5 (1KB each, Switchable)", type: "vram", 
+                  romAddress: "Switchable 1KB CHR banks", mirroring: "No mirroring",
+                  description: "1KB chunks of Character ROM that can be independently switched" },
+                
+                // Nametables with configurable mirroring
+                { offsetStart: 0x2000 + 0x10000, offsetEnd: 0x2FFF + 0x10000, definition: "Nametables with Configurable Mirroring", type: "vram", 
+                  romAddress: "No ROM mapping", mirroring: "Horizontal or Vertical (configurable)",
+                  description: "4 nametables with mirroring configured by MMC3 registers" },
+                
+                { offsetStart: 0x3000 + 0x10000, offsetEnd: 0x3EFF + 0x10000, definition: "Nametable Mirrors", type: "mirror", 
+                  romAddress: "No ROM mapping", mirroring: "Mirrors of $2000-$2EFF",
+                  description: "Mirrors of nametables" },
+                
+                { offsetStart: 0x3F00 + 0x10000, offsetEnd: 0x3FFF + 0x10000, definition: "Palette RAM and Mirrors", type: "vram", 
+                  romAddress: "No ROM mapping", mirroring: "Various internal mirrors",
+                  description: "Palette data with mirrors" }
+            ],
+            
+            nes_vrc6: [
+                // CPU Memory Map
+                { offsetStart: 0x0000, offsetEnd: 0x1FFF, definition: "Internal RAM and Mirrors", type: "ram", 
+                  romAddress: "No ROM mapping", mirroring: "Mirrors every 2KB",
+                  description: "2KB of internal RAM mirrored 4 times" },
+                
+                { offsetStart: 0x2000, offsetEnd: 0x3FFF, definition: "PPU Registers and Mirrors", type: "hardware", 
+                  romAddress: "No ROM mapping", mirroring: "Mirrors every 8 bytes",
+                  description: "PPU registers mirrored throughout this region" },
+                
+                { offsetStart: 0x4000, offsetEnd: 0x401F, definition: "APU and I/O Registers", type: "hardware", 
+                  romAddress: "No ROM mapping", mirroring: "No mirroring",
+                  description: "Audio and I/O control registers" },
+                
+                { offsetStart: 0x4020, offsetEnd: 0x5FFF, definition: "Expansion ROM", type: "unused", 
+                  romAddress: "Not used in VRC6", mirroring: "No mirroring",
+                  description: "Unused expansion area in VRC6 cartridges" },
+                
+                { offsetStart: 0x6000, offsetEnd: 0x7FFF, definition: "PRG-RAM / Battery RAM", type: "sram", 
+                  romAddress: "No ROM mapping", mirroring: "No mirroring",
+                  description: "8KB of cartridge RAM, often battery-backed for saves" },
+                
+                { offsetStart: 0x8000, offsetEnd: 0x9FFF, definition: "PRG-ROM Bank 0 (Switchable)", type: "rom", 
+                  romAddress: "Switchable 8KB bank", mirroring: "No mirroring",
+                  description: "8KB switchable PRG-ROM bank" },
+                
+                { offsetStart: 0xA000, offsetEnd: 0xBFFF, definition: "PRG-ROM Bank 1 (Switchable)", type: "rom", 
+                  romAddress: "Switchable 8KB bank", mirroring: "No mirroring",
+                  description: "8KB switchable PRG-ROM bank" },
+                
+                { offsetStart: 0xC000, offsetEnd: 0xDFFF, definition: "PRG-ROM Bank 2 (Switchable)", type: "rom", 
+                  romAddress: "Switchable 8KB bank", mirroring: "No mirroring",
+                  description: "8KB switchable PRG-ROM bank" },
+                
+                { offsetStart: 0xE000, offsetEnd: 0xFFFF, definition: "PRG-ROM Bank 3 (Fixed)", type: "rom", 
+                  romAddress: "Fixed to last 8KB bank", mirroring: "No mirroring",
+                  description: "8KB PRG-ROM bank, fixed to last bank" },
+                
+                // VRC6 Audio Registers
+                { offsetStart: 0x9000, offsetEnd: 0x9003, definition: "VRC6 Square 1", type: "hardware", 
+                  romAddress: "No ROM mapping", mirroring: "No mirroring",
+                  description: "VRC6 Square 1 channel audio registers" },
+                
+                { offsetStart: 0xA000, offsetEnd: 0xA003, definition: "VRC6 Square 2", type: "hardware", 
+                  romAddress: "No ROM mapping", mirroring: "No mirroring",
+                  description: "VRC6 Square 2 channel audio registers" },
+                
+                { offsetStart: 0xB000, offsetEnd: 0xB003, definition: "VRC6 Sawtooth", type: "hardware", 
+                  romAddress: "No ROM mapping", mirroring: "No mirroring",
+                  description: "VRC6 Sawtooth channel audio registers" },
+                
+                // PPU Memory Map
+                { offsetStart: 0x10000, offsetEnd: 0x1FFF + 0x10000, definition: "CHR Banks (1KB switchable)", type: "vram", 
+                  romAddress: "Switchable 1KB CHR banks", mirroring: "No mirroring",
+                  description: "8 independent 1KB switchable CHR-ROM banks" },
+                
+                { offsetStart: 0x2000 + 0x10000, offsetEnd: 0x2FFF + 0x10000, definition: "Nametables with Configurable Mirroring", type: "vram", 
+                  romAddress: "No ROM mapping", mirroring: "Horizontal, Vertical, or Single Screen (configurable)",
+                  description: "4 nametables with mirroring configured by VRC6 registers" },
+                
+                { offsetStart: 0x3000 + 0x10000, offsetEnd: 0x3EFF + 0x10000, definition: "Nametable Mirrors", type: "mirror", 
+                  romAddress: "No ROM mapping", mirroring: "Mirrors of $2000-$2EFF",
+                  description: "Mirrors of nametables" },
+                
+                { offsetStart: 0x3F00 + 0x10000, offsetEnd: 0x3FFF + 0x10000, definition: "Palette RAM and Mirrors", type: "vram", 
+                  romAddress: "No ROM mapping", mirroring: "Various internal mirrors",
+                  description: "Palette data with mirrors" }
+            ]
+        };
+        
+        // Color mapping for memory types
+        const typeColors = {
+            ram: "#4285F4",        // Blue
+            rom: "#34A853",        // Green
+            hardware: "#FBBC05",   // Yellow
+            sram: "#EA4335",       // Red
+            unused: "#9AA0A6",     // Gray
+            reserved: "#9AA0A6",   // Gray
+            mirror: "#673AB7",     // Purple
+            vram: "#FF9800"        // Orange - for NES CHR-ROM/VRAM
+        };
+        
+        // DOM elements
+        const memoryMapEl = document.getElementById('memory-map');
+        const tooltipEl = document.getElementById('tooltip');
+        const mapTypeEl = document.getElementById('map-type');
+        
+        // Filter checkboxes
+        const showRamEl = document.getElementById('show-ram');
+        const showRomEl = document.getElementById('show-rom');
+        const showHardwareEl = document.getElementById('show-hardware');
+        const showUnusedEl = document.getElementById('show-unused');
+        const showShadowsEl = document.getElementById('show-shadows');
+        const showMirrorsEl = document.getElementById('show-mirrors');
+        const showGridEl = document.getElementById('show-grid');
+        const showGridNesEl = document.getElementById('show-grid-nes');
+        const showFastRomEl = document.getElementById('show-fastrom');
+        
+        // System selection
+        const snesTabsEl = document.querySelector('.snes-tabs');
+        const nesTabsEl = document.querySelector('.nes-tabs');
+        const snesControlsEl = document.querySelector('.snes-controls');
+        const nesControlsEl = document.querySelector('.nes-controls');
+        const snesAxisEl = document.querySelectorAll('.snes-axis');
+        const nesAxisEl = document.querySelector('.nes-axis');
+        const nesOnlyEl = document.querySelector('.nes-only');
+        
+        // Current state
+        let currentMapType = 'lorom';
+        let currentSystem = 'snes';
+        
+        // NES or SNES system selection
+        // NES or SNES system selection
+        document.querySelectorAll('.system-button').forEach(button => {
+            button.addEventListener('click', function() {
+                const system = this.dataset.system;
+                
+                // Update active button
+                document.querySelectorAll('.system-button').forEach(btn => {
+                    btn.classList.remove('active');
+                });
+                this.classList.add('active');
+                
+                // Update current system
+                currentSystem = system;
+                
+                // Update UI elements
+                if (system === 'nes') {
+                    snesTabsEl.style.display = 'none';
+                    nesTabsEl.style.display = 'block';
+                    snesControlsEl.style.display = 'none';
+                    nesControlsEl.style.display = 'block';
+                    nesOnlyEl.style.display = 'flex';
+                    
+                    // Update axis display
+                    snesAxisEl.forEach(axis => axis.style.display = 'none');
+                    if (nesAxisEl) nesAxisEl.style.display = 'flex';
+                    
+                    // Completely rebuild the dropdown with only NES options
+                    const nesOptions = [
+                        { value: 'nes_nrom', text: 'NROM (No Mapper)' },
+                        { value: 'nes_mmc1', text: 'MMC1 (Mapper 1)' },
+                        { value: 'nes_mmc3', text: 'MMC3 (Mapper 4)' },
+                        { value: 'nes_vrc6', text: 'VRC6 (Mapper 24/26)' }
+                    ];
+                    
+                    // Clear existing options
+                    mapTypeEl.innerHTML = '';
+                    
+                    // Add NES options
+                    nesOptions.forEach(option => {
+                        const optionEl = document.createElement('option');
+                        optionEl.value = option.value;
+                        optionEl.textContent = option.text;
+                        mapTypeEl.appendChild(optionEl);
+                    });
+                    
+                    // Set default value
+                    mapTypeEl.value = 'nes_nrom';
+                    currentMapType = 'nes_nrom';
+                    
+                } else {
+                    snesTabsEl.style.display = 'block';
+                    nesTabsEl.style.display = 'none';
+                    snesControlsEl.style.display = 'block';
+                    nesControlsEl.style.display = 'none';
+                    nesOnlyEl.style.display = 'none';
+                    
+                    // Update axis display
+                    snesAxisEl.forEach(axis => axis.style.display = 'flex');
+                    if (nesAxisEl) nesAxisEl.style.display = 'none';
+                    
+                    // Completely rebuild the dropdown with only SNES options
+                    const snesOptions = [
+                        { value: 'lorom', text: 'LoROM' },
+                        { value: 'hirom', text: 'HiROM' },
+                        { value: 'exlorom', text: 'ExLoROM' },
+                        { value: 'exhirom', text: 'ExHiROM' }
+                    ];
+                    
+                    // Clear existing options
+                    mapTypeEl.innerHTML = '';
+                    
+                    // Add SNES options
+                    snesOptions.forEach(option => {
+                        const optionEl = document.createElement('option');
+                        optionEl.value = option.value;
+                        optionEl.textContent = option.text;
+                        mapTypeEl.appendChild(optionEl);
+                    });
+                    
+                    // Set default value
+                    mapTypeEl.value = 'lorom';
+                    currentMapType = 'lorom';
+                }
+                
+                // Regenerate memory map
+                generateMemoryMap();
+            });
+        });
+        // Generate grid lines
+        function generateGrid() {
+            // Clear existing grid lines
+            const existingLines = document.querySelectorAll('.grid-line');
+            existingLines.forEach(line => line.remove());
+            
+            // Check if grid should be shown
+            const showGrid = currentSystem === 'snes' ? showGridEl.checked : showGridNesEl.checked;
+            if (!showGrid) return;
+            
+            if (currentSystem === 'snes') {
+                // SNES grid - create divisions at regular intervals
+                const xDivisions = 8; // Create lines at regular offsets
+                for (let i = 1; i < xDivisions; i++) {
+                    const xPos = (i / xDivisions) * 100;
+                    const gridLine = document.createElement('div');
+                    gridLine.className = 'grid-line grid-line-x';
+                    gridLine.style.left = `${xPos}%`;
+                    memoryMapEl.appendChild(gridLine);
+                }
+                
+                const yDivisions = 8; // Create lines at regular bank intervals
+                for (let i = 1; i < yDivisions; i++) {
+                    const yPos = (i / yDivisions) * 100;
+                    const gridLine = document.createElement('div');
+                    gridLine.className = 'grid-line grid-line-y';
+                    gridLine.style.top = `${yPos}%`;
+                    memoryMapEl.appendChild(gridLine);
+                }
+            } else {
+                // CPU memory markers (top half)
+                const cpuAddresses = [0x0000, 0x0800, 0x1000, 0x1800, 0x2000, 0x3000, 0x4000, 0x5000, 0x6000, 0x7000, 0x8000, 0x9000, 0xA000, 0xB000, 0xC000, 0xD000, 0xE000, 0xF000, 0xFFFF];
+                cpuAddresses.forEach(addr => {
+                    const xPos = (addr / 0x10000) * 100;
+                    
+                    // Add marker - moved down to bottom of CPU section
+                    const marker = document.createElement('div');
+                    marker.className = 'axis-marker x-marker';
+                    marker.style.top = '40%'; // Position at bottom of CPU memory section
+                    marker.style.bottom = 'auto'; // Override default bottom positioning
+                    marker.textContent = 'CPU:$' + addr.toString(16).padStart(4, '0').toUpperCase();
+                    marker.style.left = `${xPos}%`;
+                    memoryMapEl.appendChild(marker);
+                    
+                    // Add tick
+                    const tick = document.createElement('div');
+                    tick.className = 'axis-tick x-tick';
+                    tick.style.top = '50%'; // Position at bottom of CPU memory
+                    tick.style.bottom = 'auto'; // Override default
+                    tick.style.left = `${xPos}%`;
+                    memoryMapEl.appendChild(tick);
+                });
+                
+                // PPU memory markers (bottom half)
+                const ppuAddresses = [0x0000, 0x1000, 0x2000, 0x2400, 0x2800, 0x2C00, 0x3000, 0x3F00, 0x3FFF];
+                ppuAddresses.forEach(addr => {
+                    // Properly scale PPU addresses - PPU has 14-bit address space but we need to fit into our display width
+                    const xPos = (addr / 0x10000) * 100; // Scale to full width for consistency with CPU display
+                    
+                    // Add marker - positioned at the bottom of the PPU section
+                    const marker = document.createElement('div');
+                    marker.className = 'axis-marker x-marker';
+                    marker.style.bottom = '-25px'; // Position at bottom of visualization
+                    marker.style.top = 'auto'; // Override default top positioning
+                    marker.textContent = 'PPU:$' + addr.toString(16).padStart(4, '0').toUpperCase();
+                    marker.style.left = `${xPos}%`;
+                    memoryMapEl.appendChild(marker);
+                    
+                    // Add tick for PPU section
+                    const tick = document.createElement('div');
+                    tick.className = 'axis-tick x-tick';
+                    tick.style.bottom = '0'; // At very bottom of memory map
+                    tick.style.top = 'auto'; // Override default
+                    tick.style.left = `${xPos}%`;
+                    memoryMapEl.appendChild(tick);
+                });
+                
+                // Add line at PPU memory boundary
+                const ppuLine = document.createElement('div');
+                ppuLine.className = 'grid-line grid-line-y';
+                ppuLine.style.top = '50%';
+                ppuLine.style.height = '1px';
+                ppuLine.style.background = 'rgba(0,0,0,0.3)';
+                memoryMapEl.appendChild(ppuLine);
+            }
+        }
+        
+        // Function to generate the memory map visualization
+        function generateMemoryMap() {
+            // Clear previous memory regions
+            const existingRegions = document.querySelectorAll('.memory-region');
+            existingRegions.forEach(region => region.remove());
+            
+            // Generate grid
+            generateGrid();
+            
+            // Generate axis markers
+            generateAxisMarkers();
+    
+            // Get the current memory map data based on selected type
+            const mapData = memoryMapData[currentMapType];
+            
+            // Check filters
+            const filters = {
+                ram: showRamEl.checked,
+                rom: showRomEl.checked,
+                hardware: showHardwareEl.checked,
+                unused: showUnusedEl.checked,
+                sram: true,  // Always show SRAM
+                reserved: showUnusedEl.checked,
+                mirror: currentSystem === 'snes' ? showShadowsEl.checked : showMirrorsEl.checked,
+                vram: true   // Always show CHR-ROM/VRAM for NES
+            };
+            
+            // Generate regions
+            mapData.forEach((region, index) => {
+                // Skip if filtered out
+                if (!filters[region.type]) return;
+                
+                // Calculate position and size relative to map container
+                if (currentSystem === 'snes') {
+                    // SNES style positioning (bank-based)
+                    const bankStart = region.bankStart / 0x100; // 0x00-0xFF
+                    const bankEnd = region.bankEnd / 0x100;
+                    const offsetStart = region.offsetStart / 0x10000; // 0x0000-0xFFFF
+                    const offsetEnd = region.offsetEnd / 0x10000;
+                    
+                    const left = offsetStart * 100; // Convert to percentage
+                    const top = bankStart * 100;
+                    const width = (offsetEnd - offsetStart + 1/0x10000) * 100; // Add a tiny amount to include end address
+                    const height = (bankEnd - bankStart + 1/0x100) * 100;
+                    
+                    // Create memory region element
+                    const regionEl = document.createElement('div');
+                    regionEl.className = 'memory-region';
+                    regionEl.dataset.index = index;
+                    
+                    // Set position and size
+                    regionEl.style.left = `${left}%`;
+                    regionEl.style.top = `${top}%`;
+                    regionEl.style.width = `${width}%`;
+                    regionEl.style.height = `${height}%`;
+                    
+                    // Set background color
+                    let color = typeColors[region.type];
+                    
+                    // Adjust colors for FastROM mode if enabled (banks > $80)
+                    if (showFastRomEl.checked && region.bankStart >= 0x80) {
+                        // Brighten the color to indicate FastROM access
+                        const rgb = hexToRgb(color);
+                        color = rgbToHex(
+                            Math.min(255, rgb.r + 40),
+                            Math.min(255, rgb.g + 40),
+                            Math.min(255, rgb.b + 40)
+                        );
+                    }
+                    
+                    regionEl.style.backgroundColor = color;
+                    
+                    // Add label if region is large enough
+                    if (width > 5 && height > 1) {
+                        regionEl.innerHTML = `
+                            <div class="region-label">${region.definition}</div>
+                            <div class="address-label">$${region.bankStart.toString(16).padStart(2, '0')}-$${region.bankEnd.toString(16).padStart(2, '0')}:$${region.offsetStart.toString(16).padStart(4, '0')}-$${region.offsetEnd.toString(16).padStart(4, '0')}</div>
+                        `;
+                    }
+                    
+                    // Add event listeners for tooltip
+                    regionEl.addEventListener('mouseover', (e) => showTooltipSNES(e, region));
+                    regionEl.addEventListener('mousemove', moveTooltip);
+                    regionEl.addEventListener('mouseout', hideTooltip);
+                    
+                    // Add to the map
+                    memoryMapEl.appendChild(regionEl);
+                    
+                } else {
+                    // NES style positioning (flat memory map)
+                    const offsetStart = region.offsetStart % 0x10000; // Handle PPU address space
+                    const offsetEnd = region.offsetEnd % 0x10000;
+                    const isPPU = region.offsetStart >= 0x10000; // PPU memory is above $10000 in our data structure
+                    
+                    const left = (offsetStart / 0x10000) * 100; // Convert to percentage
+                    let top = isPPU ? 50 : 0; // CPU memory in top half, PPU in bottom half
+                    const width = ((offsetEnd - offsetStart + 1) / 0x10000) * 100;
+                    const height = isPPU ? 50 : 50; // Each section gets half the height
+                    
+                    // Create memory region element
+                    const regionEl = document.createElement('div');
+                    regionEl.className = 'memory-region';
+                    regionEl.dataset.index = index;
+                    
+                    // Set position and size
+                    regionEl.style.left = `${left}%`;
+                    regionEl.style.top = `${top}%`;
+                    regionEl.style.width = `${width}%`;
+                    regionEl.style.height = `${height}%`;
+                    
+                    // Set background color
+                    regionEl.style.backgroundColor = typeColors[region.type];
+                    
+                    // Add label if region is large enough
+                    if (width > 2 && height > 3) {
+                        const addrPrefix = isPPU ? "PPU:" : "CPU:";
+                        regionEl.innerHTML = `
+                            <div class="region-label">${region.definition}</div>
+                            <div class="address-label">${addrPrefix}$${offsetStart.toString(16).padStart(4, '0')}-$${offsetEnd.toString(16).padStart(4, '0')}</div>
+                        `;
+                    }
+                    
+                    // Add event listeners for tooltip
+                    regionEl.addEventListener('mouseover', (e) => showTooltipNES(e, region));
+                    regionEl.addEventListener('mousemove', moveTooltip);
+                    regionEl.addEventListener('mouseout', hideTooltip);
+                    
+                    // Add to the map
+                    memoryMapEl.appendChild(regionEl);
+                }
+            });
+        }
+        
+        function generateAxisMarkers() {
+            // Clear existing markers
+            const existingMarkers = document.querySelectorAll('.axis-marker, .axis-tick');
+            existingMarkers.forEach(marker => marker.remove());
+            
+            if (currentSystem === 'snes') {
+                // X-axis markers (offset addresses)
+                const xSteps = 16; // 16 markers for more granularity
+                for (let i = 0; i <= xSteps; i++) {
+                    const offset = Math.floor((i / xSteps) * 0x10000);
+                    const xPos = (offset / 0x10000) * 100;
+                    
+                    // Only add markers for significant positions
+                    if (i % 2 === 0 || i === xSteps) {
+                        const marker = document.createElement('div');
+                        marker.className = 'axis-marker x-marker';
+                        marker.textContent = '$' + offset.toString(16).padStart(4, '0').toUpperCase();
+                        marker.style.left = `${xPos}%`;
+                        memoryMapEl.appendChild(marker);
+                    }
+                    
+                    // Add tick marks for all steps
+                    const tick = document.createElement('div');
+                    tick.className = 'axis-tick x-tick';
+                    tick.style.left = `${xPos}%`;
+                    memoryMapEl.appendChild(tick);
+                }
+                
+                // Y-axis markers (bank numbers)
+                const ySteps = 16; // 16 markers for more granularity
+                for (let i = 0; i <= ySteps; i++) {
+                    const bank = Math.floor((i / ySteps) * 0x100);
+                    const yPos = (bank / 0x100) * 100;
+                    
+                    // Only add markers for significant positions
+                    if (i % 2 === 0 || i === ySteps) {
+                        const marker = document.createElement('div');
+                        marker.className = 'axis-marker y-marker';
+                        marker.textContent = '$' + bank.toString(16).padStart(2, '0').toUpperCase();
+                        marker.style.top = `${yPos}%`;
+                        memoryMapEl.appendChild(marker);
+                    }
+                    
+                    // Add tick marks for all steps
+                    const tick = document.createElement('div');
+                    tick.className = 'axis-tick y-tick';
+                    tick.style.top = `${yPos}%`;
+                    memoryMapEl.appendChild(tick);
+                }
+            } else {
+                // NES X-axis markers for CPU memory
+                const cpuAddresses = [0x0000, 0x0800, 0x1000, 0x1800, 0x2000, 0x3000, 0x4000, 0x5000, 0x6000, 0x7000, 0x8000, 0x9000, 0xA000, 0xB000, 0xC000, 0xD000, 0xE000, 0xF000, 0xFFFF];
+                cpuAddresses.forEach(addr => {
+                    const xPos = (addr / 0x10000) * 100;
+                    
+                    // Add marker
+                    const marker = document.createElement('div');
+                    marker.className = 'axis-marker x-marker';
+                    marker.style.top = '10px'; // Position at top for CPU memory
+                    marker.textContent = '$' + addr.toString(16).padStart(4, '0').toUpperCase();
+                    marker.style.left = `${xPos}%`;
+                    memoryMapEl.appendChild(marker);
+                    
+                    // Add tick
+                    const tick = document.createElement('div');
+                    tick.className = 'axis-tick x-tick';
+                    tick.style.top = '0px';
+                    tick.style.left = `${xPos}%`;
+                    memoryMapEl.appendChild(tick);
+                });
+                
+                // NES X-axis markers for PPU memory
+                const ppuAddresses = [0x0000, 0x1000, 0x2000, 0x2400, 0x2800, 0x2C00, 0x3000, 0x3F00, 0x3FFF];
+                ppuAddresses.forEach(addr => {
+                    const xPos = (addr / 0x4000) * 100; // PPU has 14-bit address space
+                    
+                    // Add marker
+                    const marker = document.createElement('div');
+                    marker.className = 'axis-marker x-marker';
+                    marker.style.top = '60%'; // Position at bottom for PPU memory
+                    marker.textContent = 'PPU:$' + addr.toString(16).padStart(4, '0').toUpperCase();
+                    marker.style.left = `${xPos}%`;
+                    memoryMapEl.appendChild(marker);
+                });
+            }
+        }
+
+        // Tooltip functions for SNES
+        function showTooltipSNES(e, region) {
+            let fastRomInfo = '';
+            if (region.bankStart >= 0x80 && showFastRomEl.checked) {
+                fastRomInfo = '<p><strong>FastROM:</strong> This region can use FastROM access (3.58 MHz)</p>';
+            }
+            
+            tooltipEl.innerHTML = `
+                <h4>${region.definition}</h4>
+                <p><strong>Range:</strong> $${region.bankStart.toString(16).padStart(2, '0')}-$${region.bankEnd.toString(16).padStart(2, '0')}:$${region.offsetStart.toString(16).padStart(4, '0')}-$${region.offsetEnd.toString(16).padStart(4, '0')}</p>
+                <p><strong>Type:</strong> ${region.type.charAt(0).toUpperCase() + region.type.slice(1)}</p>
+                ${region.romAddress !== "No ROM mapping" ? `<p><strong>ROM Address:</strong> ${region.romAddress}</p>` : ''}
+                ${region.shadowing !== "No mapping" ? `<p><strong>Shadowed in:</strong> ${region.shadowing}</p>` : ''}
+                ${fastRomInfo}
+                <p>${region.description}</p>
+            `;
+            
+            tooltipEl.style.opacity = '1';
+            moveTooltip(e);
+        }
+        
+        // Tooltip functions for NES
+        function showTooltipNES(e, region) {
+            const isPPU = region.offsetStart >= 0x10000;
+            const offsetStart = region.offsetStart % 0x10000;
+            const offsetEnd = region.offsetEnd % 0x10000;
+            const addrPrefix = isPPU ? "PPU:" : "CPU:";
+            
+            tooltipEl.innerHTML = `
+                <h4>${region.definition}</h4>
+                <p><strong>Range:</strong> ${addrPrefix}$${offsetStart.toString(16).padStart(4, '0')}-$${offsetEnd.toString(16).padStart(4, '0')}</p>
+                <p><strong>Type:</strong> ${region.type.charAt(0).toUpperCase() + region.type.slice(1)}</p>
+                ${region.romAddress !== "No ROM mapping" ? `<p><strong>ROM Address:</strong> ${region.romAddress}</p>` : ''}
+                ${region.mirroring ? `<p><strong>Mirroring:</strong> ${region.mirroring}</p>` : ''}
+                <p>${region.description}</p>
+            `;
+            
+            tooltipEl.style.opacity = '1';
+            moveTooltip(e);
+        }
+        
+        function moveTooltip(e) {
+            const mapRect = memoryMapEl.getBoundingClientRect();
+            const tooltipWidth = 300; // Estimated width
+            const tooltipHeight = 200; // Estimated height
+            
+            // Position tooltip based on mouse position
+            let x = e.clientX - mapRect.left + 15;
+            let y = e.clientY - mapRect.top + 15;
+            
+            // Adjust if tooltip would go off the edges
+            if (x + tooltipWidth > mapRect.width) {
+                x = e.clientX - mapRect.left - tooltipWidth - 15;
+            }
+            
+            if (y + tooltipHeight > mapRect.height) {
+                y = e.clientY - mapRect.top - tooltipHeight - 15;
+            }
+            
+            tooltipEl.style.left = `${x}px`;
+            tooltipEl.style.top = `${y}px`;
+        }
+        
+        function hideTooltip() {
+            tooltipEl.style.opacity = '0';
+        }
+        
+        // Event listeners for controls
+        mapTypeEl.addEventListener('change', (e) => {
+            currentMapType = e.target.value;
+            generateMemoryMap();
+        });
+        
+        // Filter change listeners
+        [showRamEl, showRomEl, showHardwareEl, showUnusedEl, showShadowsEl, 
+         showMirrorsEl, showGridEl, showGridNesEl, showFastRomEl].forEach(el => {
+            if (el) el.addEventListener('change', generateMemoryMap);
+        });
+        
+        // Tab functionality
+        document.querySelectorAll('.tab-button').forEach(button => {
+            button.addEventListener('click', () => {
+                // Find parent tab container
+                const tabContainer = button.closest('.tab-container');
+                
+                // Remove active class from all buttons in this container
+                tabContainer.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
+                
+                // Remove active class from all content elements in this container
+                tabContainer.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                
+                // Add active class to this button
+                button.classList.add('active');
+                
+                // Show corresponding content
+                const tabId = 'tab-' + button.dataset.tab;
+                document.getElementById(tabId).classList.add('active');
+            });
+        });
+        
+        // Utility function to convert hex color to RGB
+        function hexToRgb(hex) {
+            // Remove # if present
+            hex = hex.replace(/^#/, '');
+            
+            // Parse r, g, b values
+            const bigint = parseInt(hex, 16);
+            const r = (bigint >> 16) & 255;
+            const g = (bigint >> 8) & 255;
+            const b = bigint & 255;
+            
+            return { r, g, b };
+        }
+        
+        // Utility function to convert RGB to hex
+        function rgbToHex(r, g, b) {
+            return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+        }
+        
+        // Calculate size in bytes for a region
+        function calculateRegionSize(region) {
+            if (currentSystem === 'snes') {
+                const bankSize = region.bankEnd - region.bankStart + 1;
+                const offsetSize = region.offsetEnd - region.offsetStart + 1;
+                return bankSize * offsetSize;
+            } else {
+                return region.offsetEnd - region.offsetStart + 1;
+            }
+        }
+        
+        // Handle click on memory region to show detailed info panel
+        memoryMapEl.addEventListener('click', (e) => {
+            const regionEl = e.target.closest('.memory-region');
+            if (!regionEl) return;
+            
+            const index = regionEl.dataset.index;
+            const region = memoryMapData[currentMapType][index];
+            
+            // Create or update info panel with detailed information// Create or update info panel with detailed information
+            let infoPanel = document.querySelector('.info-panel-detail');
+            if (!infoPanel) {
+                infoPanel = document.createElement('div');
+                infoPanel.className = 'info-panel info-panel-detail';
+                document.querySelector('.map-container').appendChild(infoPanel);
+            }
+            
+            // Calculate size in bytes
+            const totalBytes = calculateRegionSize(region);
+            let sizeStr = `${totalBytes} bytes`;
+            if (totalBytes >= 1024) {
+                sizeStr = `${(totalBytes / 1024).toFixed(2)} KB (${totalBytes} bytes)`;
+            }
+            if (totalBytes >= 1024 * 1024) {
+                sizeStr = `${(totalBytes / (1024 * 1024)).toFixed(2)} MB (${totalBytes} bytes)`;
+            }
+            
+            if (currentSystem === 'snes') {
+                // SNES info panel content
+                let fastRomInfo = '';
+                if (region.bankStart >= 0x80 && showFastRomEl.checked) {
+                    fastRomInfo = `
+                    <h3>FastROM Access</h3>
+                    <p>This memory region can be accessed at 3.58 MHz (120 ns) instead of the standard 2.68 MHz (200 ns) when register $420D is set to 1.</p>
+                    `;
+                }
+                
+                infoPanel.innerHTML = `
+                    <h2>${region.definition}</h2>
+                    <p><strong>Address Range:</strong> $${region.bankStart.toString(16).padStart(2, '0')}-$${region.bankEnd.toString(16).padStart(2, '0')}:$${region.offsetStart.toString(16).padStart(4, '0')}-$${region.offsetEnd.toString(16).padStart(4, '0')}</p>
+                    <p><strong>Size:</strong> ${sizeStr}</p>
+                    <p><strong>Description:</strong> ${region.description}</p>
+                    
+                    <h3>Technical Details</h3>
+                    <p><strong>Type:</strong> ${region.type.charAt(0).toUpperCase() + region.type.slice(1)}</p>
+                    <p><strong>ROM Address:</strong> ${region.romAddress}</p>
+                    <p><strong>Shadowing:</strong> ${region.shadowing}</p>
+                    
+                    ${fastRomInfo}
+                    
+                    <h3>Notes</h3>
+                    <p>This memory region is part of the ${currentMapType.toUpperCase()} memory map configuration.</p>
+                    ${region.type === 'hardware' ? `
+                        <p>Hardware registers control various aspects of the SNES hardware including graphics, sound, and I/O.</p>
+                        <p>Many of these registers are write-only or have special behavior when read.</p>
+                    ` : ''}
+                    ${region.type === 'rom' ? `
+                        <p>ROM sections contain the game code and data read from the cartridge.</p>
+                        <p>ROM is non-volatile memory that retains its contents when power is off.</p>
+                    ` : ''}
+                    ${region.type === 'ram' ? `
+                        <p>RAM sections are used for temporary storage during program execution.</p>
+                        <p>RAM is volatile memory that loses its contents when power is off.</p>
+                    ` : ''}
+                    ${region.type === 'sram' ? `
+                        <p>SRAM (Save RAM) retains data when the system is powered off, used for game saves.</p>
+                        <p>It requires a battery backup on the cartridge to maintain its contents.</p>
+                    ` : ''}
+                    ${region.type === 'mirror' ? `
+                        <p>This is a mirrored region, meaning the same physical memory can be accessed using different addresses.</p>
+                        <p>Mirroring allows for optimization in certain access patterns.</p>
+                    ` : ''}
+                `;
+            } else {
+                // NES info panel content
+                const offsetStart = region.offsetStart % 0x10000;
+                const offsetEnd = region.offsetEnd % 0x10000;
+                const isPPU = region.offsetStart >= 0x10000;
+                const addrPrefix = isPPU ? "PPU:" : "CPU:";
+                
+                infoPanel.innerHTML = `
+                    <h2>${region.definition}</h2>
+                    <p><strong>Address Range:</strong> ${addrPrefix}$${offsetStart.toString(16).padStart(4, '0')}-$${offsetEnd.toString(16).padStart(4, '0')}</p>
+                    <p><strong>Size:</strong> ${sizeStr}</p>
+                    <p><strong>Description:</strong> ${region.description}</p>
+                    
+                    <h3>Technical Details</h3>
+                    <p><strong>Type:</strong> ${region.type.charAt(0).toUpperCase() + region.type.slice(1)}</p>
+                    <p><strong>ROM Address:</strong> ${region.romAddress}</p>
+                    <p><strong>Mirroring:</strong> ${region.mirroring || "None"}</p>
+                    
+                    <h3>Notes</h3>
+                    <p>This memory region is part of the ${currentMapType.replace('nes_', '').toUpperCase()} memory map configuration.</p>
+                    ${region.type === 'hardware' ? `
+                        <p>Hardware registers control various aspects of the NES hardware including graphics, sound, and I/O.</p>
+                        <p>Many of these registers are write-only or have special behavior when read.</p>
+                    ` : ''}
+                    ${region.type === 'rom' ? `
+                        <p>ROM sections contain the game code and data read from the cartridge.</p>
+                        <p>In the NES, PRG-ROM contains the program code executed by the CPU.</p>
+                    ` : ''}
+                    ${region.type === 'ram' ? `
+                        <p>RAM sections are used for temporary storage during program execution.</p>
+                        <p>The NES has only 2KB of internal RAM, making efficient memory usage essential.</p>
+                    ` : ''}
+                    ${region.type === 'sram' ? `
+                        <p>SRAM (Save RAM) retains data when the system is powered off, used for game saves.</p>
+                        <p>Often referred to as PRG-RAM in NES documentation.</p>
+                    ` : ''}
+                    ${region.type === 'vram' ? `
+                        <p>Video RAM used by the Picture Processing Unit (PPU) for graphics data.</p>
+                        <p>CHR-ROM (Character ROM) contains tile data stored in the cartridge, while VRAM refers to the PPU's internal memory.</p>
+                    ` : ''}
+                    ${region.type === 'mirror' ? `
+                        <p>This is a mirrored region, meaning the same physical memory can be accessed using different addresses.</p>
+                        <p>The NES makes extensive use of mirroring to efficiently use its limited memory space.</p>
+                    ` : ''}
+                `;
+            }
+        });
+        
+        // Initial generation
+        generateMemoryMap();
+    </script>
+</body>
+</html>
